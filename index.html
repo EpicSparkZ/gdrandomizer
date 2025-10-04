@@ -54,11 +54,12 @@
   <div id="points"></div>
 </main>
 
-<!-- Firebase SDKs (compat for global firebase variable) -->
+<!-- Firebase SDKs (compat version for global firebase variable) -->
 <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-database-compat.js"></script>
 
 <script>
+window.onload = function() {
   // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
@@ -119,14 +120,14 @@
       const randomId = Math.floor(Math.random() * maxId) + 1;
       console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
-      try {
-        // Check if this level was previously marked invalid
-        const invalidSnap = await db.ref(`invalidLevels/${randomId}`).get();
-        if (invalidSnap.exists()) {
-          console.log(`Level ID ${randomId} is known invalid, skipping...`);
-          continue;
-        }
+      // Check Firebase for invalid IDs
+      const snapshot = await db.ref('invalidLevels/' + randomId).get();
+      if (snapshot.exists()) {
+        console.log(`Attempt ${attempts}: Level ID ${randomId} previously marked invalid, skipping...`);
+        continue;
+      }
 
+      try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
         const text = await response.text();
         const data = JSON.parse(text);
@@ -137,18 +138,17 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
-            await db.ref(`invalidLevels/${randomId}`).set(true); // mark invalid
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, marking as invalid...`);
+            db.ref('invalidLevels/' + randomId).set(true);
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-          await db.ref(`invalidLevels/${randomId}`).set(true); // mark invalid
+          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, marking as invalid...`);
+          db.ref('invalidLevels/' + randomId).set(true);
           await new Promise(r => setTimeout(r, 150));
         }
       } catch (err) {
         console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await db.ref(`invalidLevels/${randomId}`).set(true); // mark invalid
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -162,13 +162,13 @@
     // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
+    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes count as dislikes
     const rated = levelData.starred || false;
     const extraPoints = rated ? 150 : 0;
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
     if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
 
-    // Display only Level, Creator, ID, Likes, Downloads, Rated
+    // Display Level info
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
@@ -181,6 +181,7 @@
   }
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+};
 </script>
 
 </body>
