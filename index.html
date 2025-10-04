@@ -5,12 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Random Level Generator</title>
 <style>
-  body { font-family: Arial; background-color: #121212; color: #fff; text-align: center; margin: 0; padding: 0; }
-  header { background-color: #1e1e1e; padding: 20px; font-size: 24px; font-weight: bold; }
-  main { padding: 20px; }
-  button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
-  #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
-  a { color: #00bfff; }
+  body {
+    font-family: Arial;
+    background-color: #121212;
+    color: #fff;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+  }
+  header {
+    background-color: #1e1e1e;
+    padding: 20px;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  main {
+    padding: 20px;
+  }
+  button {
+    padding: 10px;
+    font-size: 16px;
+    margin: 10px;
+    border-radius: 5px;
+    border: none;
+    background-color: #00bfff;
+    color: #fff;
+    cursor: pointer;
+  }
+  #levelInfo, #points {
+    margin-top: 20px;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  a {
+    color: #00bfff;
+  }
 </style>
 </head>
 <body>
@@ -23,14 +54,11 @@
   <div id="points"></div>
 </main>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
+  import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
 
-<script>
-  const proxyUrl = 'https://api.allorigins.win/raw?url=';
-
-  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
@@ -40,23 +68,36 @@
     messagingSenderId: "463453414221",
     appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
 
-  const skippedIds = {};
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
-  // Preload skipped IDs from Firebase
-  function preloadSkippedIds() {
-    const skippedRef = db.ref('skippedLevels');
-    skippedRef.once('value', snapshot => {
-      const data = snapshot.val();
-      if (data) {
-        Object.keys(data).forEach(id => skippedIds[id] = true);
-        console.log('Loaded skipped IDs from Firebase:', Object.keys(skippedIds).length);
-      }
-    });
+  const skippedIdsCache = {}; // local cache by range
+
+  async function isSkipped(levelId) {
+    const rangeStart = Math.floor(levelId / 10000) * 10000;
+    const rangeEnd = rangeStart + 9999;
+    const rangeKey = `${rangeStart}-${rangeEnd}`;
+
+    if (skippedIdsCache[rangeKey]) return skippedIdsCache[rangeKey][levelId] === true;
+
+    const snapshot = await get(ref(db, `skippedLevels/${rangeKey}`));
+    const data = snapshot.val() || {};
+    skippedIdsCache[rangeKey] = data;
+    return data[levelId] === true;
   }
-  preloadSkippedIds();
+
+  async function markSkipped(levelId) {
+    const rangeStart = Math.floor(levelId / 10000) * 10000;
+    const rangeEnd = rangeStart + 9999;
+    const rangeKey = `${rangeStart}-${rangeEnd}`;
+
+    if (!skippedIdsCache[rangeKey]) skippedIdsCache[rangeKey] = {};
+    skippedIdsCache[rangeKey][levelId] = true;
+
+    await set(ref(db, `skippedLevels/${rangeKey}/${levelId}`), true);
+  }
 
   async function getMaxLevelID() {
     try {
@@ -64,10 +105,13 @@
       const text = await response.text();
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-      if (ids.length === 0) return 150000000; 
-      return Math.max(...ids);
-    } catch {
-      return 150000000; 
+      if (ids.length === 0) return 150000000;
+      const maxId = Math.max(...ids);
+      console.log('Max level ID determined:', maxId);
+      return maxId;
+    } catch (err) {
+      console.error('Error fetching max level ID:', err);
+      return 150000000;
     }
   }
 
@@ -76,7 +120,7 @@
       const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
       const text = await response.text();
       return !text.includes("404: Not Found");
-    } catch {
+    } catch (err) {
       return false;
     }
   }
@@ -84,7 +128,6 @@
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
-
     levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
 
@@ -96,12 +139,16 @@
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
-      if (skippedIds[randomId]) continue;
 
+      if (await isSkipped(randomId)) {
+        console.log(`Attempt ${attempts}: Skipped ID ${randomId}`);
+        continue;
+      }
+
+      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
       try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
-        const text = await response.text();
-        const data = JSON.parse(text);
+        const data = await response.json();
 
         if (data.name && (data.creator || data.author)) {
           const exists = await levelExistsOnSite(randomId);
@@ -109,16 +156,17 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            skippedIds[randomId] = true;
-            db.ref('skippedLevels/' + randomId).set(true);
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, marking skipped`);
+            await markSkipped(randomId);
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          skippedIds[randomId] = true;
-          db.ref('skippedLevels/' + randomId).set(true);
+          console.log(`Attempt ${attempts}: Invalid API data, marking skipped`);
+          await markSkipped(randomId);
           await new Promise(r => setTimeout(r, 150));
         }
-      } catch {
+      } catch (err) {
+        console.log(`Attempt ${attempts}: Error fetching level, retrying...`, err);
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -129,6 +177,7 @@
       return;
     }
 
+    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
