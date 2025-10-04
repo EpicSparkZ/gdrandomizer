@@ -122,15 +122,15 @@
             // Write invalid ID to Firebase
             firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
               .catch(err => console.error('Error writing invalid ID to Firebase:', err));
-            await new Promise(r => setTimeout(r, 150));
+            await new Promise(r => setTimeout(r, 100));
           }
         } else {
           console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-          await new Promise(r => setTimeout(r, 150));
+          await new Promise(r => setTimeout(r, 100));
         }
       } catch (err) {
         console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 100));
       }
     }
 
