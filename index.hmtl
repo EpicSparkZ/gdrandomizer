@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GD Random Level Points</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #121212;
+    color: #fff;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+  }
+
+  header {
+    background-color: #1e1e1e;
+    padding: 20px;
+    font-size: 24px;
+    font-weight: bold;
+  }
+
+  main {
+    padding: 20px;
+  }
+
+  input {
+    padding: 10px;
+    font-size: 16px;
+    margin-bottom: 10px;
+    width: 200px;
+    border-radius: 5px;
+    border: none;
+  }
+
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+    margin: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #00bfff;
+    color: #fff;
+  }
+
+  #levelInfo, #points {
+    margin-top: 20px;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+</style>
+</head>
+<body>
+
+<header>Geometry Dash Random Level Points</header>
+
+<main>
+  <input id="username" placeholder="Enter your username"><br>
+  <button id="randomLevel">Get Random Level</button>
+
+  <div id="levelInfo"></div>
+  <div id="points"></div>
+</main>
+
+<script>
+  // Placeholder JS for testing layout
+  document.getElementById('randomLevel').addEventListener('click', () => {
+    const username = document.getElementById('username').value || 'Guest';
+    document.getElementById('levelInfo').innerText = `Fetched a random level for ${username}.`;
+    document.getElementById('points').innerText = `Points earned: 0`;
+  });
+</script>
+
+</body>
+</html>
