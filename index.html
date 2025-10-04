@@ -23,76 +23,118 @@
   <div id="points"></div>
 </main>
 
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
+
 <script>
-const proxyUrl = 'https://api.allorigins.win/raw?url=';
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
+    authDomain: "gd-randomizer.firebaseapp.com",
+    databaseURL: "https://gd-randomizer-default-rtdb.firebaseio.com",
+    projectId: "gd-randomizer",
+    storageBucket: "gd-randomizer.firebasestorage.app",
+    messagingSenderId: "463453414221",
+    appId: "1:463453414221:web:95ac36c24417228c718d04"
+  };
 
-async function levelExists(levelId) {
-  try {
-    const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
-    const text = await response.text();
-    return !text.includes("404: Not Found");
-  } catch {
-    return false;
-  }
-}
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
 
-async function getRandomLevel() {
-  const levelInfo = document.getElementById('levelInfo');
-  const pointsDiv = document.getElementById('points');
-  levelInfo.innerText = 'Loading random level...';
-  pointsDiv.innerText = '';
+  // Sign in anonymously
+  firebase.auth().signInAnonymously()
+    .then(() => console.log("Signed in anonymously to Firebase."))
+    .catch(error => console.error("Anonymous sign-in failed:", error));
 
-  let levelData = null;
-  const maxAttempts = 500;
-  const maxId = 150000000; // fallback max ID
+  const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const randomId = Math.floor(Math.random() * maxId) + 1;
-    console.log(`Attempt ${attempt}: Trying level ID ${randomId}`);
-
+  async function levelExistsOnSite(levelId) {
     try {
-      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
       const text = await response.text();
-      const data = JSON.parse(text);
-
-      if (data.name && (data.creator || data.author)) {
-        const exists = await levelExists(randomId);
-        if (exists) {
-          levelData = data;
-          console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
-          break;
-        }
-      }
+      return !text.includes("404: Not Found");
     } catch {
-      // ignore errors and continue
+      return false;
+    }
+  }
+
+  async function getRandomLevel() {
+    const levelInfo = document.getElementById('levelInfo');
+    const pointsDiv = document.getElementById('points');
+
+    // Make sure Firebase auth is ready
+    if (!firebase.auth().currentUser) {
+      levelInfo.innerText = 'Signing in to Firebase, please wait...';
+      await new Promise(resolve => {
+        const unsub = firebase.auth().onAuthStateChanged(user => {
+          if (user) { unsub(); resolve(); }
+        });
+      });
     }
 
-    await new Promise(r => setTimeout(r, 150)); // 150ms delay between attempts
-  }
-
-  if (!levelData) {
-    levelInfo.innerText = 'Could not find a valid level. Please try again.';
+    levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
-    return;
+
+    let levelData = null;
+    const maxId = 150000000;
+    let attempts = 0;
+    const maxAttempts = 500;
+
+    while (!levelData && attempts < maxAttempts) {
+      attempts++;
+      const randomId = Math.floor(Math.random() * maxId) + 1;
+      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
+
+      try {
+        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+        const text = await response.text();
+        const data = JSON.parse(text);
+
+        if (data.name && (data.creator || data.author)) {
+          const exists = await levelExistsOnSite(randomId);
+          if (exists) {
+            levelData = data;
+            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
+          } else {
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
+            firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
+              .catch(err => console.error('Error writing invalid ID to Firebase:', err));
+            await new Promise(r => setTimeout(r, 150));
+          }
+        } else {
+          await new Promise(r => setTimeout(r, 150));
+        }
+      } catch {
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    if (!levelData) {
+      levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
+      pointsDiv.innerText = '';
+      return;
+    }
+
+    const likes = levelData.likes || 0;
+    const downloads = levelData.downloads || 0;
+    const rated = levelData.starred || false;
+    const extraPoints = rated ? 150 : 0;
+    let points = (likes * 2) + (downloads * 0.15) + extraPoints;
+
+    levelInfo.innerHTML = `
+      <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
+      <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
+      <strong>ID:</strong> ${levelData.id}<br>
+      <strong>Likes:</strong> ${likes}<br>
+      <strong>Downloads:</strong> ${downloads}<br>
+      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
+    `;
+    pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
 
-  const likes = levelData.likes || 0;
-  const downloads = levelData.downloads || 0;
-  const rated = levelData.starred || false;
-  let points = (likes * 2) + (downloads * 0.15) + (rated ? 150 : 0);
-
-  levelInfo.innerHTML = `
-    <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-    <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
-    <strong>ID:</strong> ${levelData.id}<br>
-    <strong>Likes:</strong> ${likes}<br>
-    <strong>Downloads:</strong> ${downloads}<br>
-    <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
-  `;
-  pointsDiv.innerText = 'Points earned: ' + Math.round(points);
-}
-
-document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+  document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
 
 </body>
