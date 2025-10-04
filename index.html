@@ -54,11 +54,13 @@
   <div id="points"></div>
 </main>
 
-<!-- Firebase SDK -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-app.js";
-  import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.3.0/firebase-database.js";
+<!-- Firebase scripts -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
+<script>
+  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
@@ -69,105 +71,65 @@
     appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const proxyUrl = 'https://api.allorigins.win/raw?url=';
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-  const skippedIdsCache = {}; // local cache by range
+  // Anonymous sign-in
+  firebase.auth().signInAnonymously().catch(err => console.error(err));
 
-  async function isSkipped(levelId) {
-    const rangeStart = Math.floor(levelId / 10000) * 10000;
-    const rangeEnd = rangeStart + 9999;
-    const rangeKey = `${rangeStart}-${rangeEnd}`;
-
-    if (skippedIdsCache[rangeKey]) return skippedIdsCache[rangeKey][levelId] === true;
-
-    const snapshot = await get(ref(db, `skippedLevels/${rangeKey}`));
-    const data = snapshot.val() || {};
-    skippedIdsCache[rangeKey] = data;
-    return data[levelId] === true;
+  async function getInvalidIDs() {
+    const snapshot = await db.ref('invalidLevels').once('value');
+    return snapshot.val() || {};
   }
 
-  async function markSkipped(levelId) {
-    const rangeStart = Math.floor(levelId / 10000) * 10000;
-    const rangeEnd = rangeStart + 9999;
-    const rangeKey = `${rangeStart}-${rangeEnd}`;
-
-    if (!skippedIdsCache[rangeKey]) skippedIdsCache[rangeKey] = {};
-    skippedIdsCache[rangeKey][levelId] = true;
-
-    await set(ref(db, `skippedLevels/${rangeKey}/${levelId}`), true);
-  }
-
-  async function getMaxLevelID() {
-    try {
-      const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
-      const text = await response.text();
-      const matches = [...text.matchAll(/\/level\/(\d+)/g)];
-      const ids = matches.map(m => parseInt(m[1], 10));
-      if (ids.length === 0) return 150000000;
-      const maxId = Math.max(...ids);
-      console.log('Max level ID determined:', maxId);
-      return maxId;
-    } catch (err) {
-      console.error('Error fetching max level ID:', err);
-      return 150000000;
-    }
-  }
-
-  async function levelExistsOnSite(levelId) {
-    try {
-      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
-      const text = await response.text();
-      return !text.includes("404: Not Found");
-    } catch (err) {
-      return false;
-    }
+  async function markInvalidID(levelId) {
+    await db.ref(`invalidLevels/${levelId}`).set(true);
   }
 
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
+
     levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
 
-    const maxId = await getMaxLevelID();
     let levelData = null;
+    const maxId = 150000000;
+    const invalidIDs = await getInvalidIDs();
     let attempts = 0;
-    const maxAttempts = 500;
 
-    while (!levelData && attempts < maxAttempts) {
+    while (!levelData && attempts < 500) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
 
-      if (await isSkipped(randomId)) {
-        console.log(`Attempt ${attempts}: Skipped ID ${randomId}`);
-        continue;
-      }
+      if (invalidIDs[randomId]) continue; // skip known invalid
 
       console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
+
       try {
-        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+        const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`)}`);
         const data = await response.json();
 
         if (data.name && (data.creator || data.author)) {
-          const exists = await levelExistsOnSite(randomId);
-          if (exists) {
-            levelData = data;
-            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
-          } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, marking skipped`);
-            await markSkipped(randomId);
+          // Check if level exists on gdbrowser
+          const pageRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://gdbrowser.com/level/${randomId}`)}`);
+          const pageText = await pageRes.text();
+          if (pageText.includes("404: Not Found")) {
+            await markInvalidID(randomId);
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
             await new Promise(r => setTimeout(r, 150));
+            continue;
           }
+
+          levelData = data;
+          console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
         } else {
-          console.log(`Attempt ${attempts}: Invalid API data, marking skipped`);
-          await markSkipped(randomId);
-          await new Promise(r => setTimeout(r, 150));
+          await markInvalidID(randomId);
         }
       } catch (err) {
-        console.log(`Attempt ${attempts}: Error fetching level, retrying...`, err);
-        await new Promise(r => setTimeout(r, 150));
+        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
+        await new Promise(r => setTimeout(r, 150)); // 150 ms delay
       }
     }
 
@@ -186,6 +148,7 @@
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
     if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
 
+    // Display level info (without dislikes)
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
