@@ -55,6 +55,26 @@
 </main>
 
 <script>
+  const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+  async function getMaxLevelID() {
+    try {
+      // Fetch the HTML of GDHistory
+      const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
+      const text = await response.text();
+
+      // Extract level IDs using regex
+      const matches = [...text.matchAll(/\/level\/(\d+)/g)];
+      const ids = matches.map(m => parseInt(m[1], 10));
+      const maxId = Math.max(...ids);
+
+      return maxId || 10000000; // fallback if nothing found
+    } catch (err) {
+      console.error('Error fetching max level ID:', err);
+      return 10000000; // fallback value
+    }
+  }
+
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
@@ -62,25 +82,20 @@
     levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
 
-    const proxyUrl = 'https://api.allorigins.win/raw?url=';
-    const maxId = 10000000;
-
     let levelData = null;
+    const maxId = await getMaxLevelID();
 
-    // Keep retrying until a valid level is found
     while (!levelData) {
       try {
         const randomId = Math.floor(Math.random() * maxId) + 1;
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
         const data = await response.json();
 
-        // Check if the data is valid (not undefined / 0)
         if (data.name && data.creator) {
           levelData = data;
         } else {
-          // Retry automatically
-          console.log('Invalid level, retrying...', randomId);
-          await new Promise(r => setTimeout(r, 10)); // tiny delay before retry
+          // Retry if level is invalid
+          await new Promise(r => setTimeout(r, 10));
         }
       } catch (err) {
         console.error('Error fetching level, retrying...', err);
@@ -91,7 +106,6 @@
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
-
     const extraPoints = rated ? 150 : 0;
     const points = (likes * 2) + (downloads * 0.15) + extraPoints;
 
