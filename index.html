@@ -63,28 +63,27 @@
     pointsDiv.innerText = '';
 
     const proxyUrl = 'https://api.allorigins.win/raw?url=';
-    const maxId = 10000000; // You can adjust this based on the latest GD level
+    const maxId = 10000000;
 
     let levelData = null;
 
-    // Keep trying until a valid level is found
+    // Keep retrying until a valid level is found
     while (!levelData) {
       try {
         const randomId = Math.floor(Math.random() * maxId) + 1;
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
         const data = await response.json();
 
-        // GD Browser returns success: false if level doesn't exist
-        if (!data.success && data.error) {
-          continue; // try a new random ID
+        // Check if the data is valid (not undefined / 0)
+        if (data.name && data.creator) {
+          levelData = data;
+        } else {
+          // Retry automatically
+          console.log('Invalid level, retrying...', randomId);
+          await new Promise(r => setTimeout(r, 100)); // tiny delay before retry
         }
-
-        // Level exists, store it
-        levelData = data;
-
       } catch (err) {
-        console.error('Error fetching level, trying again...', err);
-        // Wait a tiny bit before retrying to avoid spamming requests
+        console.error('Error fetching level, retrying...', err);
         await new Promise(r => setTimeout(r, 100));
       }
     }
