@@ -27,7 +27,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-functions-compat.js"></script>
 
 <script>
   // Firebase config
@@ -46,12 +45,8 @@
 
   // Sign in anonymously
   firebase.auth().signInAnonymously()
-    .then(() => {
-      console.log("Signed in anonymously to Firebase.");
-    })
-    .catch(error => {
-      console.error("Anonymous sign-in failed:", error);
-    });
+    .then(() => console.log("Signed in anonymously to Firebase."))
+    .catch(error => console.error("Anonymous sign-in failed:", error));
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
@@ -62,9 +57,7 @@
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
       if (ids.length === 0) return 150000000;
-      const maxId = Math.max(...ids);
-      console.log('Max level ID determined:', maxId);
-      return maxId;
+      return Math.max(...ids);
     } catch (err) {
       console.error('Error fetching max level ID:', err);
       return 150000000;
@@ -81,11 +74,16 @@
     }
   }
 
+  // CORS-safe logInvalidLevel
   async function logInvalidLevel(levelId) {
-    const logInvalidLevelFn = firebase.functions().httpsCallable('logInvalidLevel');
     try {
-      await logInvalidLevelFn({ levelId });
-      console.log('Logged invalid level ID:', levelId);
+      const response = await fetch('https://us-central1-gd-randomizer.cloudfunctions.net/logInvalidLevel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ levelId })
+      });
+      const result = await response.json();
+      console.log('Logged invalid level ID:', levelId, result);
     } catch (err) {
       console.error('Error calling Firebase function:', err);
     }
@@ -95,13 +93,10 @@
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
 
-    // Make sure Firebase auth is ready
     if (!firebase.auth().currentUser) {
       levelInfo.innerText = 'Signing in to Firebase, please wait...';
       await new Promise(resolve => {
-        const unsub = firebase.auth().onAuthStateChanged(user => {
-          if (user) { unsub(); resolve(); }
-        });
+        const unsub = firebase.auth().onAuthStateChanged(user => { if (user) { unsub(); resolve(); } });
       });
     }
 
@@ -129,10 +124,9 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
-            // Write invalid ID to Firebase using callable function
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found, logging...`);
             await logInvalidLevel(randomId);
-            await new Promise(r => setTimeout(r, 150)); // 150ms delay between attempts
+            await new Promise(r => setTimeout(r, 150));
           }
         } else {
           console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
@@ -150,7 +144,6 @@
       return;
     }
 
-    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
