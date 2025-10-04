@@ -68,7 +68,7 @@
 
       if (ids.length === 0) {
         console.warn('No level IDs found, using fallback max ID 10000000');
-        return 10000000; // fallback if scrape fails
+        return 10000000;
       }
 
       const maxId = Math.max(...ids);
@@ -76,7 +76,7 @@
       return maxId;
     } catch (err) {
       console.error('Error fetching max level ID:', err);
-      return 10000000; // fallback on error
+      return 10000000;
     }
   }
 
@@ -104,9 +104,10 @@
 
         const data = JSON.parse(text);
 
-        if (data.name && data.creator) {
+        // Treat levels with either 'creator' or 'author' as valid
+        if (data.name && (data.creator || data.author)) {
           levelData = data;
-          console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}, Creator: ${data.creator}`);
+          console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}, Creator: ${data.creator || data.author}`);
         } else {
           console.log(`Attempt ${attempts}: Invalid level ID ${randomId}, retrying...`);
           await new Promise(r => setTimeout(r, 10));
@@ -131,7 +132,7 @@
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-      <strong>Creator:</strong> ${levelData.creator}<br>
+      <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
