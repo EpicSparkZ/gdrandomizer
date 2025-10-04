@@ -55,106 +55,103 @@
 </main>
 
 <script>
-const proxyUrl = 'https://api.allorigins.win/raw?url=';
+  const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
-// Get the maximum level ID from Geometry Dash history
-async function getMaxLevelID() {
-  try {
-    const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
-    const text = await response.text();
-    const matches = [...text.matchAll(/\/level\/(\d+)/g)];
-    const ids = matches.map(m => parseInt(m[1], 10));
-    if (ids.length === 0) return 150000000; // fallback
-    const maxId = Math.max(...ids);
-    console.log('Max level ID determined:', maxId);
-    return maxId;
-  } catch (err) {
-    console.error('Error fetching max level ID:', err);
-    return 150000000; // fallback
-  }
-}
-
-// Check if a level exists on gdbrowser
-async function levelExistsOnSite(levelId) {
-  try {
-    const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
-    const text = await response.text();
-    return !text.includes("404: Not Found");
-  } catch {
-    return false;
-  }
-}
-
-// Fetch a random valid level
-async function getRandomLevel() {
-  const levelInfo = document.getElementById('levelInfo');
-  const pointsDiv = document.getElementById('points');
-
-  levelInfo.innerText = 'Loading random level...';
-  pointsDiv.innerText = '';
-
-  let levelData = null;
-  const maxId = await getMaxLevelID();
-  let attempts = 0;
-  const maxAttempts = 500;
-
-  while (!levelData && attempts < maxAttempts) {
-    attempts++;
-    const randomId = Math.floor(Math.random() * maxId) + 1;
-    console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
-
+  async function getMaxLevelID() {
     try {
-      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+      const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
       const text = await response.text();
-      const data = JSON.parse(text);
-
-      if (data.name && (data.creator || data.author)) {
-        const exists = await levelExistsOnSite(randomId);
-        if (exists) {
-          levelData = data;
-          console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
-        } else {
-          console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
-          await new Promise(r => setTimeout(r, 50));
-        }
-      } else {
-        console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-        await new Promise(r => setTimeout(r, 50));
-      }
+      const matches = [...text.matchAll(/\/level\/(\d+)/g)];
+      const ids = matches.map(m => parseInt(m[1], 10));
+      if (ids.length === 0) return 150000000; // fallback silently
+      const maxId = Math.max(...ids);
+      console.log('Max level ID determined:', maxId);
+      return maxId;
     } catch (err) {
-      console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-      await new Promise(r => setTimeout(r, 50));
+      console.error('Error fetching max level ID:', err);
+      return 150000000; // fallback silently
     }
   }
 
-  if (!levelData) {
-    levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
-    pointsDiv.innerText = '';
-    return;
+  async function levelExistsOnSite(levelId) {
+    try {
+      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
+      const text = await response.text();
+      return !text.includes("404: Not Found");
+    } catch (err) {
+      return false;
+    }
   }
 
-  // Points calculation
-  const likes = levelData.likes || 0;
-  const downloads = levelData.downloads || 0;
-  const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes as dislikes
-  const rated = levelData.starred || false;
-  const extraPoints = rated ? 150 : 0;
-  let points = (likes * 2) + (downloads * 0.15) + extraPoints;
-  if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
+  async function getRandomLevel() {
+    const levelInfo = document.getElementById('levelInfo');
+    const pointsDiv = document.getElementById('points');
 
-  // Display Level info without dislikes
-  levelInfo.innerHTML = `
-    <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-    <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
-    <strong>ID:</strong> ${levelData.id}<br>
-    <strong>Likes:</strong> ${likes}<br>
-    <strong>Downloads:</strong> ${downloads}<br>
-    <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
-  `;
-  pointsDiv.innerText = 'Points earned: ' + Math.round(points);
-}
+    levelInfo.innerText = 'Loading random level...';
+    pointsDiv.innerText = '';
 
-document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+    let levelData = null;
+    const maxId = await getMaxLevelID();
+    let attempts = 0;
+    const maxAttempts = 500;
+
+    while (!levelData && attempts < maxAttempts) {
+      attempts++;
+      const randomId = Math.floor(Math.random() * maxId) + 1;
+      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
+
+      try {
+        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+        const text = await response.text();
+        const data = JSON.parse(text);
+
+        if (data.name && (data.creator || data.author)) {
+          const exists = await levelExistsOnSite(randomId);
+          if (exists) {
+            levelData = data;
+            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
+          } else {
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
+            await new Promise(r => setTimeout(r, 150));
+          }
+        } else {
+          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
+          await new Promise(r => setTimeout(r, 150));
+        }
+      } catch (err) {
+        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
+
+    if (!levelData) {
+      levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
+      pointsDiv.innerText = '';
+      return;
+    }
+
+    // Points calculation
+    const likes = levelData.likes || 0;
+    const downloads = levelData.downloads || 0;
+    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes count as dislikes
+    const rated = levelData.starred || false;
+    const extraPoints = rated ? 150 : 0;
+    let points = (likes * 2) + (downloads * 0.15) + extraPoints;
+    if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
+
+    // Display only Level, Creator, ID, Likes, Downloads, Rated
+    levelInfo.innerHTML = `
+      <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
+      <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
+      <strong>ID:</strong> ${levelData.id}<br>
+      <strong>Likes:</strong> ${likes}<br>
+      <strong>Downloads:</strong> ${downloads}<br>
+      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
+    `;
+    pointsDiv.innerText = 'Points earned: ' + Math.round(points);
+  }
+
+  document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
 
 </body>
