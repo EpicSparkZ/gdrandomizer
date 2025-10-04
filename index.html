@@ -84,7 +84,7 @@
         }
       } catch (err) {
         console.error('Error fetching level, retrying...', err);
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 10));
       }
     }
 
