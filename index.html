@@ -5,12 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Random Level Generator</title>
 <style>
-  body { font-family: Arial; background-color: #121212; color: #fff; text-align: center; margin: 0; padding: 0; }
-  header { background-color: #1e1e1e; padding: 20px; font-size: 24px; font-weight: bold; }
-  main { padding: 20px; }
-  button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
-  #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
-  a { color: #00bfff; }
+  body {
+    font-family: Arial;
+    background-color: #121212;
+    color: #fff;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+  }
+  header {
+    background-color: #1e1e1e;
+    padding: 20px;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  main {
+    padding: 20px;
+  }
+  button {
+    padding: 10px;
+    font-size: 16px;
+    margin: 10px;
+    border-radius: 5px;
+    border: none;
+    background-color: #00bfff;
+    color: #fff;
+    cursor: pointer;
+  }
+  #levelInfo, #points {
+    margin-top: 20px;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  a {
+    color: #00bfff;
+  }
 </style>
 </head>
 <body>
@@ -23,13 +54,13 @@
   <div id="points"></div>
 </main>
 
-<!-- Firebase SDKs -->
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <script>
-  // Firebase config
+  // Your Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
@@ -42,10 +73,11 @@
 
   firebase.initializeApp(firebaseConfig);
 
-  // Sign in anonymously
-  firebase.auth().signInAnonymously().catch(err => console.error("Anonymous sign-in failed:", err));
+  // Anonymous login
+  firebase.auth().signInAnonymously().catch(err => {
+    console.error("Anonymous sign-in failed:", err);
+  });
 
-  const db = firebase.database();
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
   async function getMaxLevelID() {
@@ -57,8 +89,8 @@
       if (ids.length === 0) return 150000000; // fallback
       return Math.max(...ids);
     } catch (err) {
-      console.warn('Could not fetch max ID, using fallback:', err);
-      return 150000000;
+      console.error('Error fetching max level ID:', err);
+      return 150000000; // fallback
     }
   }
 
@@ -72,31 +104,29 @@
     }
   }
 
-  async function logInvalidLevel(levelId) {
-    try {
-      await db.ref('invalidLevels/' + levelId).set(true);
-    } catch (err) {
-      console.warn("Failed to log invalid ID to Firebase:", err);
-    }
-  }
-
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
-
     levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
 
+    let levelData = null;
     const maxId = await getMaxLevelID();
     let attempts = 0;
     const maxAttempts = 500;
-    let levelData = null;
 
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
-      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
+      // Check Firebase if this ID is already invalid
+      const invalidSnapshot = await firebase.database().ref('invalidLevels/' + randomId).get();
+      if (invalidSnapshot.exists()) {
+        console.log(`Skipping known invalid ID ${randomId}`);
+        continue;
+      }
+
+      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
       try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
         const text = await response.text();
@@ -106,19 +136,19 @@
           const exists = await levelExistsOnSite(randomId);
           if (exists) {
             levelData = data;
+            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            await logInvalidLevel(randomId);
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
-            await new Promise(r => setTimeout(r, 150));
+            console.log(`Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
+            await firebase.database().ref('invalidLevels/' + randomId).set(true);
           }
         } else {
-          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-          await new Promise(r => setTimeout(r, 150));
+          console.log(`Invalid API data for level ID ${randomId}, retrying...`);
         }
       } catch (err) {
-        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await new Promise(r => setTimeout(r, 150));
+        console.error(`Error fetching level ID ${randomId}, retrying...`, err);
       }
+
+      await new Promise(r => setTimeout(r, 600)); // 600 ms delay between attempts
     }
 
     if (!levelData) {
@@ -127,10 +157,9 @@
       return;
     }
 
-    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const dislikes = likes < 0 ? Math.abs(likes) : 0;
+    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
     const rated = levelData.starred || false;
     const extraPoints = rated ? 150 : 0;
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
