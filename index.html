@@ -1,48 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Random Level Generator</title>
-<style>
-  body {
-    font-family: Arial;
-    background-color: #121212;
-    color: #fff;
-    text-align: center;
-    margin: 0;
-    padding: 0;
-  }
-  header {
-    background-color: #1e1e1e;
-    padding: 20px;
-    font-size: 24px;
-    font-weight: bold;
-  }
-  main {
-    padding: 20px;
-  }
-  button {
-    padding: 10px;
-    font-size: 16px;
-    margin: 10px;
-    border-radius: 5px;
-    border: none;
-    background-color: #00bfff;
-    color: #fff;
-    cursor: pointer;
-  }
-  #levelInfo, #points {
-    margin-top: 20px;
-    text-align: left;
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  a {
-    color: #00bfff;
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Random GD Level Generator</title>
+  <style>
+    body {
+      font-family: Arial;
+      background-color: #121212;
+      color: #fff;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #1e1e1e;
+      padding: 20px;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    main {
+      padding: 20px;
+    }
+    button {
+      padding: 10px;
+      font-size: 16px;
+      margin: 10px;
+      border-radius: 5px;
+      border: none;
+      background-color: #00bfff;
+      color: #fff;
+      cursor: pointer;
+    }
+    #levelInfo, #points {
+      margin-top: 20px;
+      text-align: left;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    a {
+      color: #00bfff;
+    }
+  </style>
 </head>
 <body>
 
@@ -61,15 +61,25 @@
 
     try {
       const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const randomResponse = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
-      const randomData = await randomResponse.json();
+      const maxId = 10000000; // Estimated maximum level ID
+      let levelData = null;
+      let attempts = 0;
 
-      let levelData = randomData;
+      // Retry fetching a valid level up to 5 times
+      while (!levelData && attempts < 5) {
+        const randomId = Math.floor(Math.random() * maxId) + 1;
+        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+        levelData = await response.json();
 
-      // Check if the fetched data is incomplete and attempt to fetch again
-      if (!levelData.name || !levelData.creator || !levelData.likes || !levelData.downloads) {
-        const levelResponse = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${levelData.id}`));
-        levelData = await levelResponse.json();
+        if (levelData.success === false) {
+          levelData = null; // Reset if level doesn't exist
+        }
+
+        attempts++;
+      }
+
+      if (!levelData) {
+        throw new Error('Failed to fetch a valid level after multiple attempts.');
       }
 
       const likes = levelData.likes || 0;
