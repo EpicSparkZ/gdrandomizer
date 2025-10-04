@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Random Level Generator</title>
+<title>GD Random Level Points</title>
 <style>
   body {
     font-family: Arial;
@@ -41,6 +41,9 @@
     margin-left: auto;
     margin-right: auto;
   }
+  a {
+    color: #00bfff;
+  }
 </style>
 </head>
 <body>
@@ -56,14 +59,24 @@
 </main>
 
 <script>
-  async function getRandomLevel() {
-    const username = document.getElementById('username').value || 'Guest';
+  // Load saved username if exists
+  const savedUsername = localStorage.getItem('gdUsername');
+  if (savedUsername) {
+    document.getElementById('username').value = savedUsername;
+  }
 
-    // Example random level API
+  async function getRandomLevel() {
+    const usernameInput = document.getElementById('username');
+    const username = usernameInput.value || 'Guest';
+
+    // Save username locally
+    localStorage.setItem('gdUsername', username);
+
+    // Fetch random GD level
     const response = await fetch('https://gdbrowser.com/api/level/random');
     const data = await response.json();
 
-    // Step-by-step points calculation
+    // Points calculation
     const likes = data.likes || 0;
     const downloads = data.downloads || 0;
     const rated = data.starred || false;
@@ -75,9 +88,12 @@
 
     const points = (likes * 2) + (downloads * 0.15) + extraPoints;
 
-    // Show level info and points
-    document.getElementById('levelInfo').innerText =
-      `Level: ${data.name}\nCreator: ${data.creator}\nLikes: ${likes}, Downloads: ${downloads}, Rated: ${rated}`;
+    // Show level info
+    document.getElementById('levelInfo').innerHTML =
+      `Level: <a href="https://gdbrowser.com/level/${data.id}" target="_blank">${data.name}</a><br>` +
+      `Creator: ${data.creator}<br>` +
+      `Likes: ${likes}, Downloads: ${downloads}, Rated: ${rated}`;
+
     document.getElementById('points').innerText = `Points earned: ${points}`;
   }
 
