@@ -59,19 +59,17 @@
 
   async function getMaxLevelID() {
     try {
-      // Fetch the HTML of GDHistory
       const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
       const text = await response.text();
 
-      // Extract level IDs using regex
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
       const maxId = Math.max(...ids);
 
-      return maxId || 10000000; // fallback if nothing found
+      return maxId || 10000000;
     } catch (err) {
       console.error('Error fetching max level ID:', err);
-      return 10000000; // fallback value
+      return 10000000;
     }
   }
 
@@ -84,8 +82,11 @@
 
     let levelData = null;
     const maxId = await getMaxLevelID();
+    let attempts = 0;
+    const maxAttempts = 350;
 
-    while (!levelData) {
+    while (!levelData && attempts < maxAttempts) {
+      attempts++;
       try {
         const randomId = Math.floor(Math.random() * maxId) + 1;
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
@@ -94,13 +95,18 @@
         if (data.name && data.creator) {
           levelData = data;
         } else {
-          // Retry if level is invalid
           await new Promise(r => setTimeout(r, 10));
         }
       } catch (err) {
         console.error('Error fetching level, retrying...', err);
         await new Promise(r => setTimeout(r, 10));
       }
+    }
+
+    if (!levelData) {
+      levelInfo.innerText = 'Could not find a valid random level after 350 tries. Please try again.';
+      pointsDiv.innerText = '';
+      return;
     }
 
     const likes = levelData.likes || 0;
