@@ -54,7 +54,24 @@
   <div id="points"></div>
 </main>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "SENDER_ID",
+    appId: "APP_ID"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
   async function getMaxLevelID() {
@@ -64,12 +81,9 @@
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
       if (ids.length === 0) return 150000000; // fallback silently
-      const maxId = Math.max(...ids);
-      console.log('Max level ID determined:', maxId);
-      return maxId;
-    } catch (err) {
-      console.error('Error fetching max level ID:', err);
-      return 150000000; // fallback silently
+      return Math.max(...ids);
+    } catch {
+      return 150000000;
     }
   }
 
@@ -78,9 +92,18 @@
       const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
       const text = await response.text();
       return !text.includes("404: Not Found");
-    } catch (err) {
+    } catch {
       return false;
     }
+  }
+
+  async function isInvalidLevel(levelId) {
+    const snapshot = await db.ref('invalidLevels/' + levelId).get();
+    return snapshot.exists();
+  }
+
+  async function markInvalidLevel(levelId) {
+    await db.ref('invalidLevels/' + levelId).set(true);
   }
 
   async function getRandomLevel() {
@@ -98,6 +121,13 @@
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
+
+      // Skip invalid IDs from Firebase
+      if (await isInvalidLevel(randomId)) {
+        console.log(`Skipping level ${randomId}, known invalid`);
+        continue;
+      }
+
       console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
       try {
@@ -111,15 +141,18 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
+            await markInvalidLevel(randomId);
+            console.log(`Level ID ${randomId} not found on site, logged as invalid`);
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
+          await markInvalidLevel(randomId);
+          console.log(`Invalid API data for level ID ${randomId}, logged as invalid`);
           await new Promise(r => setTimeout(r, 150));
         }
-      } catch (err) {
-        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
+      } catch {
+        await markInvalidLevel(randomId);
+        console.log(`Error fetching level ID ${randomId}, logged as invalid`);
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -133,7 +166,7 @@
     // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes count as dislikes
+    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
     const rated = levelData.starred || false;
     const extraPoints = rated ? 150 : 0;
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
@@ -153,6 +186,5 @@
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
-
 </body>
 </html>
