@@ -62,28 +62,24 @@
     try {
       const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
-      // Step 1: Get random level ID
+      // Get a random level
       const randomResponse = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
-      const randomText = await randomResponse.text();
-      const randomData = JSON.parse(randomText);
+      const randomData = await randomResponse.json();
       const levelId = randomData.id;
 
-      // Step 2: Fetch full level info by ID
+      // Fetch full level info
       const levelResponse = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${levelId}`));
-      const levelText = await levelResponse.text();
-      const data = JSON.parse(levelText);
+      const data = await levelResponse.json();
 
       const likes = data.likes || 0;
       const downloads = data.downloads || 0;
       const rated = data.starred || false;
 
-      let extraPoints = 0;
-      if (rated) {
-        extraPoints = 150;
-      }
-
+      // Simple points formula
+      const extraPoints = rated ? 150 : 0;
       const points = (likes * 2) + (downloads * 0.15) + extraPoints;
 
+      // Display level info
       document.getElementById('levelInfo').innerHTML = `
         <strong>Level:</strong> <a href="https://gdbrowser.com/level/${data.id}" target="_blank">${data.name}</a><br>
         <strong>Creator:</strong> ${data.creator}<br>
