@@ -5,43 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Random Level Generator</title>
 <style>
-  body {
-    font-family: Arial;
-    background-color: #121212;
-    color: #fff;
-    text-align: center;
-    margin: 0;
-    padding: 0;
-  }
-  header {
-    background-color: #1e1e1e;
-    padding: 20px;
-    font-size: 24px;
-    font-weight: bold;
-  }
-  main {
-    padding: 20px;
-  }
-  button {
-    padding: 10px;
-    font-size: 16px;
-    margin: 10px;
-    border-radius: 5px;
-    border: none;
-    background-color: #00bfff;
-    color: #fff;
-    cursor: pointer;
-  }
-  #levelInfo, #points {
-    margin-top: 20px;
-    text-align: left;
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  a {
-    color: #00bfff;
-  }
+  body { font-family: Arial; background-color: #121212; color: #fff; text-align: center; margin: 0; padding: 0; }
+  header { background-color: #1e1e1e; padding: 20px; font-size: 24px; font-weight: bold; }
+  main { padding: 20px; }
+  button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
+  #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
+  a { color: #00bfff; }
 </style>
 </head>
 <body>
@@ -55,24 +24,27 @@
 </main>
 
 <!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
 <script>
+  const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
   // Firebase config
   const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
-    projectId: "YOUR_PROJECT",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
+    apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
+    authDomain: "gd-randomizer.firebaseapp.com",
+    databaseURL: "https://gd-randomizer-default-rtdb.firebaseio.com",
+    projectId: "gd-randomizer",
+    storageBucket: "gd-randomizer.firebasestorage.app",
+    messagingSenderId: "463453414221",
+    appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
-  const proxyUrl = 'https://api.allorigins.win/raw?url=';
+  // Store skipped IDs in memory to reduce repeated lookups
+  const skippedIds = {};
 
   async function getMaxLevelID() {
     try {
@@ -80,10 +52,13 @@
       const text = await response.text();
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-      if (ids.length === 0) return 150000000; // fallback silently
-      return Math.max(...ids);
-    } catch {
-      return 150000000;
+      if (ids.length === 0) return 150000000; 
+      const maxId = Math.max(...ids);
+      console.log('Max level ID determined:', maxId);
+      return maxId;
+    } catch (err) {
+      console.error('Error fetching max level ID:', err);
+      return 150000000; 
     }
   }
 
@@ -97,15 +72,6 @@
     }
   }
 
-  async function isInvalidLevel(levelId) {
-    const snapshot = await db.ref('invalidLevels/' + levelId).get();
-    return snapshot.exists();
-  }
-
-  async function markInvalidLevel(levelId) {
-    await db.ref('invalidLevels/' + levelId).set(true);
-  }
-
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
@@ -113,8 +79,8 @@
     levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
 
-    let levelData = null;
     const maxId = await getMaxLevelID();
+    let levelData = null;
     let attempts = 0;
     const maxAttempts = 500;
 
@@ -122,11 +88,8 @@
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
 
-      // Skip invalid IDs from Firebase
-      if (await isInvalidLevel(randomId)) {
-        console.log(`Skipping level ${randomId}, known invalid`);
-        continue;
-      }
+      // Skip if previously logged as invalid
+      if (skippedIds[randomId]) continue;
 
       console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
@@ -141,18 +104,19 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            await markInvalidLevel(randomId);
-            console.log(`Level ID ${randomId} not found on site, logged as invalid`);
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase...`);
+            skippedIds[randomId] = true;
+            db.ref('skippedLevels/' + randomId).set(true);
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          await markInvalidLevel(randomId);
-          console.log(`Invalid API data for level ID ${randomId}, logged as invalid`);
+          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
+          skippedIds[randomId] = true;
+          db.ref('skippedLevels/' + randomId).set(true);
           await new Promise(r => setTimeout(r, 150));
         }
-      } catch {
-        await markInvalidLevel(randomId);
-        console.log(`Error fetching level ID ${randomId}, logged as invalid`);
+      } catch (err) {
+        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -172,7 +136,7 @@
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
     if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
 
-    // Display only Level, Creator, ID, Likes, Downloads, Rated
+    // Display level info
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
@@ -186,5 +150,6 @@
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
+
 </body>
 </html>
