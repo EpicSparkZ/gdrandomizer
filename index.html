@@ -61,13 +61,17 @@
 
     try {
       const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const targetUrl = 'https://gdbrowser.com/api/level/random';
-      const response = await fetch(proxyUrl + encodeURIComponent(targetUrl));
 
-      if (!response.ok) throw new Error('Failed to fetch level');
+      // Step 1: Get random level ID
+      const randomResponse = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
+      const randomText = await randomResponse.text();
+      const randomData = JSON.parse(randomText);
+      const levelId = randomData.id;
 
-      const text = await response.text();
-      const data = JSON.parse(text);
+      // Step 2: Fetch full level info by ID
+      const levelResponse = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${levelId}`));
+      const levelText = await levelResponse.text();
+      const data = JSON.parse(levelText);
 
       const likes = data.likes || 0;
       const downloads = data.downloads || 0;
@@ -88,6 +92,7 @@
         <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
       `;
       document.getElementById('points').innerText = 'Points earned: ' + Math.round(points);
+
     } catch (err) {
       document.getElementById('levelInfo').innerText = 'Error: Could not load level.';
       console.error(err);
