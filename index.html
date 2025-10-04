@@ -55,103 +55,64 @@
 </main>
 
 <script>
-  const proxyUrl = 'https://api.allorigins.win/raw?url=';
+async function getRandomLevel() {
+  const levelInfo = document.getElementById('levelInfo');
+  const pointsDiv = document.getElementById('points');
 
-  async function getMaxLevelID() {
+  levelInfo.innerText = 'Loading random level...';
+  pointsDiv.innerText = '';
+
+  let attempts = 0;
+  const maxAttempts = 500;
+  let levelData = null;
+
+  while (!levelData && attempts < maxAttempts) {
+    attempts++;
     try {
-      const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
-      const text = await response.text();
-      const matches = [...text.matchAll(/\/level\/(\d+)/g)];
-      const ids = matches.map(m => parseInt(m[1], 10));
-      if (ids.length === 0) return 150000000; // fallback silently
-      const maxId = Math.max(...ids);
-      console.log('Max level ID determined:', maxId);
-      return maxId;
-    } catch (err) {
-      console.error('Error fetching max level ID:', err);
-      return 150000000; // fallback silently
-    }
-  }
+      const response = await fetch('http://localhost:3000/random-level'); // Node.js server
+      if (!response.ok) throw new Error('Failed to fetch level from server.');
+      const data = await response.json();
 
-  async function levelExistsOnSite(levelId) {
-    try {
-      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
-      const text = await response.text();
-      return !text.includes("404: Not Found");
-    } catch (err) {
-      return false;
-    }
-  }
-
-  async function getRandomLevel() {
-    const levelInfo = document.getElementById('levelInfo');
-    const pointsDiv = document.getElementById('points');
-
-    levelInfo.innerText = 'Loading random level...';
-    pointsDiv.innerText = '';
-
-    let levelData = null;
-    const maxId = await getMaxLevelID();
-    let attempts = 0;
-    const maxAttempts = 500;
-
-    while (!levelData && attempts < maxAttempts) {
-      attempts++;
-      const randomId = Math.floor(Math.random() * maxId) + 1;
-      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
-
-      try {
-        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
-        const text = await response.text();
-        const data = JSON.parse(text);
-
-        if (data.name && (data.creator || data.author)) {
-          const exists = await levelExistsOnSite(randomId);
-          if (exists) {
-            levelData = data;
-            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
-          } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
-            await new Promise(r => setTimeout(r, 25));
-          }
-        } else {
-          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-          await new Promise(r => setTimeout(r, 25));
-        }
-      } catch (err) {
-        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await new Promise(r => setTimeout(r, 25));
+      if (data.name && data.creator && data.id) {
+        levelData = data;
+        console.log(`Valid level found! Attempt ${attempts}, Level ID: ${data.id}`);
+      } else {
+        console.log(`Attempt ${attempts}: Invalid level data, retrying...`);
+        await new Promise(r => setTimeout(r, 50));
       }
+    } catch (err) {
+      console.error(`Attempt ${attempts}: Error fetching level, retrying...`, err);
+      await new Promise(r => setTimeout(r, 50));
     }
-
-    if (!levelData) {
-      levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
-      pointsDiv.innerText = '';
-      return;
-    }
-
-    // Points calculation
-    const likes = levelData.likes || 0;
-    const downloads = levelData.downloads || 0;
-    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes count as dislikes
-    const rated = levelData.starred || false;
-    const extraPoints = rated ? 150 : 0;
-    let points = (likes * 2) + (downloads * 0.15) + extraPoints;
-    if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
-
-    // Display only Level, Creator, ID, Likes, Downloads, Rated
-    levelInfo.innerHTML = `
-      <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-      <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
-      <strong>ID:</strong> ${levelData.id}<br>
-      <strong>Likes:</strong> ${likes}<br>
-      <strong>Downloads:</strong> ${downloads}<br>
-      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
-    `;
-    pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
 
-  document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+  if (!levelData) {
+    levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
+    pointsDiv.innerText = '';
+    return;
+  }
+
+  // Points calculation
+  const likes = levelData.likes || 0;
+  const downloads = levelData.downloads || 0;
+  const dislikes = likes < 0 ? Math.abs(likes) : 0;
+  const rated = levelData.rated || false;
+  const extraPoints = rated ? 150 : 0;
+  let points = (likes * 2) + (downloads * 0.15) + extraPoints;
+  if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
+
+  levelInfo.innerHTML = `
+    <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
+    <strong>Creator:</strong> ${levelData.creator}<br>
+    <strong>ID:</strong> ${levelData.id}<br>
+    <strong>Likes:</strong> ${likes}<br>
+    <strong>Downloads:</strong> ${downloads}<br>
+    <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
+  `;
+  pointsDiv.innerText = 'Points earned: ' + Math.round(points);
+}
+
+document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
 
 </body>
