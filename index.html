@@ -3,14 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Random GD Level Generator</title>
+<title>Random Level Generator</title>
 <style>
-  body { font-family: Arial; background-color: #121212; color: #fff; text-align: center; margin: 0; padding: 0; }
-  header { background-color: #1e1e1e; padding: 20px; font-size: 24px; font-weight: bold; }
-  main { padding: 20px; }
-  button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
-  #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
-  a { color: #00bfff; }
+  body {
+    font-family: Arial;
+    background-color: #121212;
+    color: #fff;
+    text-align: center;
+    margin: 0;
+    padding: 0;
+  }
+  header {
+    background-color: #1e1e1e;
+    padding: 20px;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  main {
+    padding: 20px;
+  }
+  button {
+    padding: 10px;
+    font-size: 16px;
+    margin: 10px;
+    border-radius: 5px;
+    border: none;
+    background-color: #00bfff;
+    color: #fff;
+    cursor: pointer;
+  }
+  #levelInfo, #points {
+    margin-top: 20px;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  a {
+    color: #00bfff;
+  }
 </style>
 </head>
 <body>
@@ -24,46 +55,45 @@
 </main>
 
 <script>
-async function getRandomLevel() {
-    const levelInfo = document.getElementById('levelInfo');
-    const pointsDiv = document.getElementById('points');
-    levelInfo.innerText = 'Loading random level...';
-    pointsDiv.innerText = '';
+  async function getRandomLevel() {
+    document.getElementById('levelInfo').innerText = 'Loading random level...';
+    document.getElementById('points').innerText = '';
 
     try {
-        const proxyUrl = 'https://api.allorigins.win/raw?url=';
-        // Step 1: Get a truly random level ID
-        const randomResp = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
-        const randomData = await randomResp.json();
-        const levelId = randomData.id;
+      const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
-        // Step 2: Fetch full level info
-        const levelResp = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${levelId}`));
-        const levelData = await levelResp.json();
+      // Fetch a random level directly
+      const response = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
+      const data = await response.json();
 
-        const likes = levelData.likes || 0;
-        const downloads = levelData.downloads || 0;
-        const rated = levelData.starred || false;
+      const id = data.id || data.levelID || data.levelID || 0;
+      const name = data.name || 'Unknown';
+      const creator = data.creator || 'Unknown';
+      const likes = data.likes || 0;
+      const downloads = data.downloads || 0;
+      const rated = data.starred || false;
 
-        const extraPoints = rated ? 150 : 0;
-        const points = (likes * 2) + (downloads * 0.15) + extraPoints;
+      let extraPoints = 0;
+      if (rated) extraPoints = 150;
 
-        levelInfo.innerHTML = `
-            <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-            <strong>Creator:</strong> ${levelData.creator}<br>
-            <strong>Likes:</strong> ${likes}<br>
-            <strong>Downloads:</strong> ${downloads}<br>
-            <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
-        `;
-        pointsDiv.innerText = 'Points earned: ' + Math.round(points);
+      const points = (likes * 2) + (downloads * 0.15) + extraPoints;
+
+      document.getElementById('levelInfo').innerHTML = `
+        <strong>Level:</strong> <a href="https://gdbrowser.com/level/${id}" target="_blank">${name}</a><br>
+        <strong>Creator:</strong> ${creator}<br>
+        <strong>Likes:</strong> ${likes}<br>
+        <strong>Downloads:</strong> ${downloads}<br>
+        <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
+      `;
+      document.getElementById('points').innerText = 'Points earned: ' + Math.round(points);
 
     } catch (err) {
-        levelInfo.innerText = 'Error: Could not load level.';
-        console.error(err);
+      document.getElementById('levelInfo').innerText = 'Error: Could not load level.';
+      console.error(err);
     }
-}
+  }
 
-document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+  document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
 
 </body>
