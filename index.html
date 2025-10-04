@@ -43,8 +43,20 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
-  // Store skipped IDs in memory to reduce repeated lookups
   const skippedIds = {};
+
+  // Preload skipped IDs from Firebase
+  function preloadSkippedIds() {
+    const skippedRef = db.ref('skippedLevels');
+    skippedRef.once('value', snapshot => {
+      const data = snapshot.val();
+      if (data) {
+        Object.keys(data).forEach(id => skippedIds[id] = true);
+        console.log('Loaded skipped IDs from Firebase:', Object.keys(skippedIds).length);
+      }
+    });
+  }
+  preloadSkippedIds();
 
   async function getMaxLevelID() {
     try {
@@ -53,11 +65,8 @@
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
       if (ids.length === 0) return 150000000; 
-      const maxId = Math.max(...ids);
-      console.log('Max level ID determined:', maxId);
-      return maxId;
-    } catch (err) {
-      console.error('Error fetching max level ID:', err);
+      return Math.max(...ids);
+    } catch {
       return 150000000; 
     }
   }
@@ -87,11 +96,7 @@
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
-
-      // Skip if previously logged as invalid
       if (skippedIds[randomId]) continue;
-
-      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
       try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
@@ -104,19 +109,16 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase...`);
             skippedIds[randomId] = true;
             db.ref('skippedLevels/' + randomId).set(true);
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
           skippedIds[randomId] = true;
           db.ref('skippedLevels/' + randomId).set(true);
           await new Promise(r => setTimeout(r, 150));
         }
-      } catch (err) {
-        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
+      } catch {
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -127,7 +129,6 @@
       return;
     }
 
-    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
@@ -136,7 +137,6 @@
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
     if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
 
-    // Display level info
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
