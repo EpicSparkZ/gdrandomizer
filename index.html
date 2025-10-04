@@ -61,14 +61,9 @@
     try {
       const response = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/'));
       const text = await response.text();
-
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-
-      if (ids.length === 0) {
-        return 150000000; // fallback silently
-      }
-
+      if (ids.length === 0) return 150000000; // fallback silently
       const maxId = Math.max(...ids);
       console.log('Max level ID determined:', maxId);
       return maxId;
@@ -98,7 +93,7 @@
     let levelData = null;
     const maxId = await getMaxLevelID();
     let attempts = 0;
-    const maxAttempts = 350;
+    const maxAttempts = 500;
 
     while (!levelData && attempts < maxAttempts) {
       attempts++;
@@ -117,15 +112,15 @@
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
             console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, retrying...`);
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 25));
           }
         } else {
           console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-          await new Promise(r => setTimeout(r, 50));
+          await new Promise(r => setTimeout(r, 25));
         }
       } catch (err) {
         console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setTimeout(r, 25));
       }
     }
 
@@ -135,14 +130,16 @@
       return;
     }
 
+    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const dislikes = levelData.disliked ? 1 : 0;
+    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes count as dislikes
     const rated = levelData.starred || false;
     const extraPoints = rated ? 150 : 0;
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
     if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
 
+    // Display only Level, Creator, ID, Likes, Downloads, Rated
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
