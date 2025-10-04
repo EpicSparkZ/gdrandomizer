@@ -22,14 +22,12 @@
   main {
     padding: 20px;
   }
-  input, button {
+  button {
     padding: 10px;
     font-size: 16px;
     margin: 10px;
     border-radius: 5px;
     border: none;
-  }
-  button {
     background-color: #00bfff;
     color: #fff;
     cursor: pointer;
@@ -51,50 +49,47 @@
 <header>Geometry Dash Random Level Points</header>
 
 <main>
-  <input id="username" placeholder="Enter your username"><br>
   <button id="randomLevel">Get Random Level</button>
-
   <div id="levelInfo"></div>
   <div id="points"></div>
 </main>
 
 <script>
-  // Load saved username if exists
-  const savedUsername = localStorage.getItem('gdUsername');
-  if (savedUsername) {
-    document.getElementById('username').value = savedUsername;
-  }
-
   async function getRandomLevel() {
-    const usernameInput = document.getElementById('username');
-    const username = usernameInput.value || 'Guest';
+    document.getElementById('levelInfo').innerText = 'Loading random level...';
+    document.getElementById('points').innerText = '';
 
-    // Save username locally
-    localStorage.setItem('gdUsername', username);
+    try {
+      // Fetch random GD level
+      const response = await fetch('https://gdbrowser.com/api/level/random');
+      if (!response.ok) throw new Error('Failed to fetch from GDBrowser');
+      const data = await response.json();
 
-    // Fetch random GD level
-    const response = await fetch('https://gdbrowser.com/api/level/random');
-    const data = await response.json();
+      // Points calculation
+      const likes = data.likes || 0;
+      const downloads = data.downloads || 0;
+      const rated = data.starred || false;
 
-    // Points calculation
-    const likes = data.likes || 0;
-    const downloads = data.downloads || 0;
-    const rated = data.starred || false;
+      let extraPoints = 0;
+      if (rated) {
+        extraPoints = 150;
+      }
 
-    let extraPoints = 0;
-    if (rated) {
-      extraPoints = 150;
+      const points = (likes * 2) + (downloads * 0.15) + extraPoints;
+
+      // Show level info
+      document.getElementById('levelInfo').innerHTML = `
+        <strong>Level:</strong> <a href="https://gdbrowser.com/level/${data.id}" target="_blank">${data.name}</a><br>
+        <strong>Creator:</strong> ${data.creator}<br>
+        <strong>Likes:</strong> ${likes}<br>
+        <strong>Downloads:</strong> ${downloads}<br>
+        <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
+      `;
+      document.getElementById('points').innerText = `Points earned: ${Math.round(points)}`;
+    } catch (err) {
+      document.getElementById('levelInfo').innerText = 'Error: Could not load level.';
+      console.error(err);
     }
-
-    const points = (likes * 2) + (downloads * 0.15) + extraPoints;
-
-    // Show level info
-    document.getElementById('levelInfo').innerHTML =
-      `Level: <a href="https://gdbrowser.com/level/${data.id}" target="_blank">${data.name}</a><br>` +
-      `Creator: ${data.creator}<br>` +
-      `Likes: ${likes}, Downloads: ${downloads}, Rated: ${rated}`;
-
-    document.getElementById('points').innerText = `Points earned: ${points}`;
   }
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
