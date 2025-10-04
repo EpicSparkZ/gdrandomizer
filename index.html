@@ -80,7 +80,7 @@
         } else {
           // Retry automatically
           console.log('Invalid level, retrying...', randomId);
-          await new Promise(r => setTimeout(r, 100)); // tiny delay before retry
+          await new Promise(r => setTimeout(r, 10)); // tiny delay before retry
         }
       } catch (err) {
         console.error('Error fetching level, retrying...', err);
