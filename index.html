@@ -5,49 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Random Level Generator</title>
 <style>
-  body {
-    font-family: Arial;
-    background-color: #121212;
-    color: #fff;
-    text-align: center;
-    margin: 0;
-    padding: 0;
-  }
-  header {
-    background-color: #1e1e1e;
-    padding: 20px;
-    font-size: 24px;
-    font-weight: bold;
-  }
-  main {
-    padding: 20px;
-  }
-  button {
-    padding: 10px;
-    font-size: 16px;
-    margin: 10px;
-    border-radius: 5px;
-    border: none;
-    background-color: #00bfff;
-    color: #fff;
-    cursor: pointer;
-  }
-  #levelInfo, #points {
-    margin-top: 20px;
-    text-align: left;
-    max-width: 400px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  a {
-    color: #00bfff;
-  }
+  body { font-family: Arial; background-color: #121212; color: #fff; text-align: center; margin: 0; padding: 0; }
+  header { background-color: #1e1e1e; padding: 20px; font-size: 24px; font-weight: bold; }
+  main { padding: 20px; }
+  button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
+  #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
+  a { color: #00bfff; }
 </style>
-
-<!-- Firebase SDKs -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
 <body>
 
@@ -58,6 +22,11 @@
   <div id="levelInfo"></div>
   <div id="points"></div>
 </main>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
 
 <script>
   // Firebase config
@@ -73,13 +42,15 @@
 
   // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
-  const database = firebase.database();
-  const auth = firebase.auth();
 
   // Sign in anonymously
-  auth.signInAnonymously()
-    .then(() => console.log("Signed in anonymously to Firebase."))
-    .catch(err => console.error("Anonymous sign-in failed:", err));
+  firebase.auth().signInAnonymously()
+    .then(() => {
+      console.log("Signed in anonymously to Firebase.");
+    })
+    .catch(error => {
+      console.error("Anonymous sign-in failed:", error);
+    });
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
@@ -89,13 +60,13 @@
       const text = await response.text();
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-      if (ids.length === 0) return 150000000; // fallback silently
+      if (ids.length === 0) return 150000000;
       const maxId = Math.max(...ids);
       console.log('Max level ID determined:', maxId);
       return maxId;
     } catch (err) {
       console.error('Error fetching max level ID:', err);
-      return 150000000; // fallback silently
+      return 150000000;
     }
   }
 
@@ -104,7 +75,7 @@
       const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
       const text = await response.text();
       return !text.includes("404: Not Found");
-    } catch {
+    } catch (err) {
       return false;
     }
   }
@@ -112,6 +83,16 @@
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
+
+    // Make sure Firebase auth is ready
+    if (!firebase.auth().currentUser) {
+      levelInfo.innerText = 'Signing in to Firebase, please wait...';
+      await new Promise(resolve => {
+        const unsub = firebase.auth().onAuthStateChanged(user => {
+          if (user) { unsub(); resolve(); }
+        });
+      });
+    }
 
     levelInfo.innerText = 'Loading random level...';
     pointsDiv.innerText = '';
@@ -137,21 +118,18 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            console.log(`Level ID ${randomId} not found on site, logging...`);
-            // Write invalid level to Firebase
-            firebase.auth().onAuthStateChanged(user => {
-              if (user) {
-                database.ref('invalidLevels/' + randomId).set(true)
-                  .catch(console.error);
-              }
-            });
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
+            // Write invalid ID to Firebase
+            firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
+              .catch(err => console.error('Error writing invalid ID to Firebase:', err));
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
+          console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
           await new Promise(r => setTimeout(r, 150));
         }
       } catch (err) {
-        console.error(`Error fetching level ID ${randomId}, retrying...`, err);
+        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
         await new Promise(r => setTimeout(r, 150));
       }
     }
@@ -162,6 +140,7 @@
       return;
     }
 
+    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
