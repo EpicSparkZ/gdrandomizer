@@ -60,15 +60,15 @@
     document.getElementById('points').innerText = '';
 
     try {
-      // Use proxy to bypass CORS
       const proxyUrl = 'https://api.allorigins.win/raw?url=';
       const targetUrl = 'https://gdbrowser.com/api/level/random';
       const response = await fetch(proxyUrl + encodeURIComponent(targetUrl));
 
       if (!response.ok) throw new Error('Failed to fetch from GDBrowser');
-      const data = await response.json();
 
-      // Points calculation
+      const text = await response.text();
+      const data = JSON.parse(text);
+
       const likes = data.likes || 0;
       const downloads = data.downloads || 0;
       const rated = data.starred || false;
@@ -80,7 +80,6 @@
 
       const points = (likes * 2) + (downloads * 0.15) + extraPoints;
 
-      // Show level info
       document.getElementById('levelInfo').innerHTML = `
         <strong>Level:</strong> <a href="https://gdbrowser.com/level/${data.id}" target="_blank">${data.name}</a><br>
         <strong>Creator:</strong> ${data.creator}<br>
