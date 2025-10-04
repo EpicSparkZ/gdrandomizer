@@ -64,10 +64,9 @@
 
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-      console.log('Found level IDs:', ids);
 
       if (ids.length === 0) {
-        console.warn('No level IDs found, using fallback max ID 10000000');
+        // Use fallback silently
         return 10000000;
       }
 
@@ -110,11 +109,11 @@
           console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}, Creator: ${data.creator || data.author}`);
         } else {
           console.log(`Attempt ${attempts}: Invalid level ID ${randomId}, retrying...`);
-          await new Promise(r => setTimeout(r, 10));
+          await new Promise(r => setTimeout(r, 25));
         }
       } catch (err) {
         console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise(r => setTimeout(r, 25));
       }
     }
 
