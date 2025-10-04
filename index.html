@@ -64,7 +64,7 @@
       const targetUrl = 'https://gdbrowser.com/api/level/random';
       const response = await fetch(proxyUrl + encodeURIComponent(targetUrl));
 
-      if (!response.ok) throw new Error('Failed to fetch from GDBrowser');
+      if (!response.ok) throw new Error('Failed to fetch level');
 
       const text = await response.text();
       const data = JSON.parse(text);
@@ -87,7 +87,7 @@
         <strong>Downloads:</strong> ${downloads}<br>
         <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
       `;
-      document.getElementById('points').innerText = \`Points earned: \${Math.round(points)}\`;
+      document.getElementById('points').innerText = 'Points earned: ' + Math.round(points);
     } catch (err) {
       document.getElementById('levelInfo').innerText = 'Error: Could not load level.';
       console.error(err);
