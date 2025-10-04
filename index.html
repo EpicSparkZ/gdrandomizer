@@ -27,6 +27,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-functions-compat.js"></script>
 
 <script>
   // Firebase config
@@ -80,6 +81,16 @@
     }
   }
 
+  async function logInvalidLevel(levelId) {
+    const logInvalidLevelFn = firebase.functions().httpsCallable('logInvalidLevel');
+    try {
+      await logInvalidLevelFn({ levelId });
+      console.log('Logged invalid level ID:', levelId);
+    } catch (err) {
+      console.error('Error calling Firebase function:', err);
+    }
+  }
+
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
@@ -119,18 +130,17 @@
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
             console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
-            // Write invalid ID to Firebase
-            firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
-              .catch(err => console.error('Error writing invalid ID to Firebase:', err));
-            await new Promise(r => setTimeout(r, 100));
+            // Write invalid ID to Firebase using callable function
+            await logInvalidLevel(randomId);
+            await new Promise(r => setTimeout(r, 150)); // 150ms delay between attempts
           }
         } else {
           console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise(r => setTimeout(r, 150));
         }
       } catch (err) {
         console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 150));
       }
     }
 
