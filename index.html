@@ -64,10 +64,10 @@
 
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-      console.log('Found level IDs:', ids); // Debug log
+      console.log('Found level IDs:', ids);
 
       const maxId = Math.max(...ids);
-      console.log('Max level ID determined:', maxId); // Debug log
+      console.log('Max level ID determined:', maxId);
 
       return maxId || 10000000;
     } catch (err) {
@@ -90,23 +90,25 @@
 
     while (!levelData && attempts < maxAttempts) {
       attempts++;
+      const randomId = Math.floor(Math.random() * maxId) + 1;
+      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
+
       try {
-        const randomId = Math.floor(Math.random() * maxId) + 1;
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
         const text = await response.text();
-        console.log(`Attempt ${attempts}: Fetched raw response for ID ${randomId}:`, text); // Debug log
+        console.log(`Attempt ${attempts}: Fetched raw response for level ID ${randomId}:`, text);
 
         const data = JSON.parse(text);
 
         if (data.name && data.creator) {
           levelData = data;
-          console.log('Valid level found:', data); // Debug log
+          console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}, Creator: ${data.creator}`);
         } else {
-          console.log(`Attempt ${attempts}: invalid level ${randomId}`); // Debug log
+          console.log(`Attempt ${attempts}: Invalid level ID ${randomId}, retrying...`);
           await new Promise(r => setTimeout(r, 10));
         }
       } catch (err) {
-        console.error(`Attempt ${attempts}: Error fetching level ${randomId}, retrying...`, err);
+        console.error(`Attempt ${attempts}: Error fetching level ID ${randomId}, retrying...`, err);
         await new Promise(r => setTimeout(r, 10));
       }
     }
