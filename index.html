@@ -54,7 +54,7 @@
   <div id="points"></div>
 </main>
 
-<!-- Firebase SDKs -->
+<!-- Firebase SDKs (compat) -->
 <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-database-compat.js"></script>
@@ -71,12 +71,12 @@
     appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
 
+  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
   // Sign in anonymously
-  firebase.auth().signInAnonymously()
-    .catch(err => console.error('Firebase auth error:', err));
+  firebase.auth().signInAnonymously().catch(err => console.error(err));
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
@@ -86,13 +86,13 @@
       const text = await response.text();
       const matches = [...text.matchAll(/\/level\/(\d+)/g)];
       const ids = matches.map(m => parseInt(m[1], 10));
-      if (ids.length === 0) return 150000000; // fallback silently
+      if (ids.length === 0) return 150000000;
       const maxId = Math.max(...ids);
       console.log('Max level ID determined:', maxId);
       return maxId;
     } catch (err) {
       console.error('Error fetching max level ID:', err);
-      return 150000000; // fallback silently
+      return 150000000;
     }
   }
 
@@ -134,15 +134,10 @@
             levelData = data;
             console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
-            // Write invalid ID to Firebase
-            firebase.auth().onAuthStateChanged(user => {
-              if (user) {
-                db.ref(`invalidLevels/${randomId}`).set(true)
-                  .catch(err => console.error('Error writing to Firebase:', err));
-              }
-            });
-            await new Promise(r => setTimeout(r, 150)); // delay
+            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging in Firebase`);
+            // Log invalid level ID to Firebase
+            db.ref('invalidLevels/' + randomId).set(true).catch(err => console.error(err));
+            await new Promise(r => setTimeout(r, 150));
           }
         } else {
           console.log(`Attempt ${attempts}: Invalid API data for level ID ${randomId}, retrying...`);
@@ -160,16 +155,14 @@
       return;
     }
 
-    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0; // negative likes count as dislikes
+    const dislikes = levelData.likes < 0 ? Math.abs(levelData.likes) : 0;
     const rated = levelData.starred || false;
     const extraPoints = rated ? 150 : 0;
     let points = (likes * 2) + (downloads * 0.15) + extraPoints;
     if (dislikes > 0) points = Math.max(0, points - (dislikes * 0.25));
 
-    // Display only Level, Creator, ID, Likes, Downloads, Rated
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
