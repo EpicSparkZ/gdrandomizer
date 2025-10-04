@@ -66,13 +66,17 @@
       const ids = matches.map(m => parseInt(m[1], 10));
       console.log('Found level IDs:', ids);
 
+      if (ids.length === 0) {
+        console.warn('No level IDs found, using fallback max ID 10000000');
+        return 10000000; // fallback if scrape fails
+      }
+
       const maxId = Math.max(...ids);
       console.log('Max level ID determined:', maxId);
-
-      return maxId || 10000000;
+      return maxId;
     } catch (err) {
       console.error('Error fetching max level ID:', err);
-      return 10000000;
+      return 10000000; // fallback on error
     }
   }
 
