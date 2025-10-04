@@ -61,26 +61,31 @@
 
     try {
       const proxyUrl = 'https://api.allorigins.win/raw?url=';
+      const randomResponse = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
+      const randomData = await randomResponse.json();
 
-      // Fetch a random level directly
-      const response = await fetch(proxyUrl + encodeURIComponent('https://gdbrowser.com/api/level/random'));
-      const data = await response.json();
+      let levelData = randomData;
 
-      const id = data.id || data.levelID || data.levelID || 0;
-      const name = data.name || 'Unknown';
-      const creator = data.creator || 'Unknown';
-      const likes = data.likes || 0;
-      const downloads = data.downloads || 0;
-      const rated = data.starred || false;
+      // Check if the fetched data is incomplete and attempt to fetch again
+      if (!levelData.name || !levelData.creator || !levelData.likes || !levelData.downloads) {
+        const levelResponse = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${levelData.id}`));
+        levelData = await levelResponse.json();
+      }
+
+      const likes = levelData.likes || 0;
+      const downloads = levelData.downloads || 0;
+      const rated = levelData.starred || false;
 
       let extraPoints = 0;
-      if (rated) extraPoints = 150;
+      if (rated) {
+        extraPoints = 150;
+      }
 
       const points = (likes * 2) + (downloads * 0.15) + extraPoints;
 
       document.getElementById('levelInfo').innerHTML = `
-        <strong>Level:</strong> <a href="https://gdbrowser.com/level/${id}" target="_blank">${name}</a><br>
-        <strong>Creator:</strong> ${creator}<br>
+        <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
+        <strong>Creator:</strong> ${levelData.creator}<br>
         <strong>Likes:</strong> ${likes}<br>
         <strong>Downloads:</strong> ${downloads}<br>
         <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
