@@ -61,18 +61,15 @@
 
     try {
       const proxyUrl = 'https://api.allorigins.win/raw?url=';
-      const countsResponse = await fetch(proxyUrl + encodeURIComponent('https://history.geometrydash.eu/api/v1/counts/'));
-      const countsData = await countsResponse.json();
-      const maxId = countsData.levels;
-
+      const maxId = 10000000; // Estimated maximum level ID
       let levelData = null;
       let attempts = 0;
 
       // Retry fetching a valid level up to 5 times
       while (!levelData && attempts < 5) {
         const randomId = Math.floor(Math.random() * maxId) + 1;
-        const levelResponse = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
-        levelData = await levelResponse.json();
+        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
+        levelData = await response.json();
 
         if (levelData.success === false) {
           levelData = null; // Reset if level doesn't exist
