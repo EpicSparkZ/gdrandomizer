@@ -10,6 +10,7 @@
   main { padding: 20px; }
   button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
   #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
+  #firebaseCounts { margin-top: 25px; color: #aaa; font-size: 14px; }
   a { color: #00bfff; }
 </style>
 </head>
@@ -21,6 +22,7 @@
   <button id="randomLevel">Get Random Level</button>
   <div id="levelInfo"></div>
   <div id="points"></div>
+  <div id="firebaseCounts">Loading Firebase data...</div>
 </main>
 
 <!-- Firebase SDKs -->
@@ -29,6 +31,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
 
 <script>
+  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
@@ -41,9 +44,45 @@
 
   firebase.initializeApp(firebaseConfig);
 
-  firebase.auth().signInAnonymously()
-    .then(() => console.log("Signed in anonymously to Firebase."))
-    .catch(error => console.error("Anonymous sign-in failed:", error));
+  const db = firebase.database();
+  const invalidRef = db.ref("invalidLevels");
+  const validRef = db.ref("validLevels");
+  const firebaseCounts = document.getElementById('firebaseCounts');
+
+  // Anonymous sign-in
+  firebase.auth().signInAnonymously().catch(console.error);
+
+  // Realtime counts display
+  function updateCountDisplay() {
+    Promise.all([
+      invalidRef.child("data").once("value"),
+      validRef.child("data").once("value")
+    ]).then(([invalidSnap, validSnap]) => {
+      const invalidCount = invalidSnap.numChildren();
+      const validCount = validSnap.numChildren();
+      firebaseCounts.textContent = `Firebase Stored IDs — Valid: ${validCount} | Invalid: ${invalidCount}`;
+    });
+  }
+
+  function updateCount(ref) {
+    ref.child("data").once("value").then(snapshot => {
+      const count = snapshot.numChildren();
+      ref.update({ count: count });
+      updateCountDisplay();
+    });
+  }
+
+  function logInvalidLevel(levelID) {
+    invalidRef.child("data").push(levelID)
+      .then(() => updateCount(invalidRef))
+      .catch(err => console.error("Error writing invalid level:", err));
+  }
+
+  function logValidLevel(levelID) {
+    validRef.child("data").push(levelID)
+      .then(() => updateCount(validRef))
+      .catch(err => console.error("Error writing valid level:", err));
+  }
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
@@ -62,7 +101,7 @@
     const pointsDiv = document.getElementById('points');
 
     if (!firebase.auth().currentUser) {
-      levelInfo.innerText = 'Signing in to Firebase, please wait...';
+      levelInfo.innerText = 'Signing in to Firebase...';
       await new Promise(resolve => {
         const unsub = firebase.auth().onAuthStateChanged(user => {
           if (user) { unsub(); resolve(); }
@@ -81,7 +120,6 @@
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
-      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
       try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
@@ -90,22 +128,14 @@
 
         if (data.name && (data.creator || data.author)) {
           const exists = await levelExistsOnSite(randomId);
-          let deleted = !exists; // True if level is deleted
-          levelData = data;
-
-          // Log invalid (deleted) levels to Firebase
-          if (deleted) {
-            console.log(`Level ID ${randomId} is deleted, logging to Firebase...`);
-            firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
-              .catch(err => console.error('Error writing invalid ID to Firebase:', err));
+          if (exists) {
+            levelData = data;
+            logValidLevel(randomId);
           } else {
-            // Log valid levels if you want
-            firebase.database().ref('validLevels/' + randomId).set({ timestamp: Date.now() })
-              .catch(err => console.error('Error writing valid ID to Firebase:', err));
+            firebase.database().ref('invalidLevels/data').push(randomId);
+            updateCount(invalidRef);
+            await new Promise(r => setTimeout(r, 450));
           }
-
-          console.log(`Valid level data fetched! ID: ${randomId}, Name: ${data.name}`);
-          await new Promise(r => setTimeout(r, 450));
         } else {
           await new Promise(r => setTimeout(r, 450));
         }
@@ -115,22 +145,21 @@
     }
 
     if (!levelData) {
-      levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
+      levelInfo.innerText = 'Could not find a valid level after 500 tries. Try again.';
       pointsDiv.innerText = '';
       return;
     }
 
+    const existsOnSite = await levelExistsOnSite(levelData.id);
+    const deleted = !existsOnSite;
+
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
-    const deleted = !(await levelExistsOnSite(levelData.id)); // Check if deleted for points
     const extraPoints = rated ? 500 : 0;
-
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-    if (deleted) points = Math.floor(points / 2);
-
-    // Never go negative
-    points = Math.max(0, points);
+    if (deleted) points /= 2;
+    if (points < 0) points = 0;
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
@@ -139,12 +168,13 @@
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${deleted ? 'Yes (points halved)' : 'No'}
+      <strong>Deleted:</strong> ${deleted ? 'Yes' : 'No'}
     `;
     pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+  updateCountDisplay();
 </script>
 
 </body>
