@@ -78,7 +78,7 @@
     pointsDiv.innerText = '';
 
     let levelData = null;
-    const maxId = 150000000;
+    const maxId = 127000000;
     let attempts = 0;
     const maxAttempts = 500;
 
@@ -104,10 +104,10 @@
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          await new Promise(r => setTimeout(r, 250));
+          await new Promise(r => setTimeout(r, 350));
         }
       } catch {
-        await new Promise(r => setTimeout(r, 250));
+        await new Promise(r => setTimeout(r, 350));
       }
     }
 
