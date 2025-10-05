@@ -54,7 +54,7 @@
     try {
       const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
       const text = await response.text();
-      return !text.includes("404: Not Found"); // true if level exists
+      return !text.includes("404: Not Found");
     } catch {
       return false;
     }
@@ -92,7 +92,7 @@
         const data = JSON.parse(text);
 
         if (data.name && (data.creator || data.author)) {
-          levelData = data; // Use API data regardless
+          levelData = data;
           console.log(`Level data found for ID ${randomId}`);
         } else {
           await new Promise(r => setTimeout(r, 450));
@@ -108,18 +108,32 @@
       return;
     }
 
-    // Check if the level is deleted (404 on gdbrowser)
+    // Check if level is deleted on gdbrowser
     const existsOnSite = await levelExistsOnSite(levelData.id);
     const deleted = !existsOnSite;
 
+    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
     const extraPoints = rated ? 500 : 0;
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-
     if (deleted) points = Math.round(points / 2);
 
+    // --- Firebase logging ---
+    const db = firebase.database();
+
+    // Log invalid (deleted) levels with count in name
+    const invalidSnapshot = await db.ref('invalidLevels').once('value');
+    const invalidCount = invalidSnapshot.exists() ? Object.keys(invalidSnapshot.val()).length : 0;
+    db.ref('invalidLevels_' + invalidCount).child(levelData.id).set({ timestamp: Date.now() })
+      .catch(err => console.error('Error writing invalid ID to Firebase:', err));
+
+    // Log valid levels
+    db.ref('validLevels').child(levelData.id).set({ timestamp: Date.now() })
+      .catch(err => console.error('Error writing valid ID to Firebase:', err));
+
+    // Display level info
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
