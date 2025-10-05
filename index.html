@@ -54,7 +54,7 @@
     try {
       const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
       const text = await response.text();
-      return !text.includes("404: Not Found");
+      return !text.includes("404: Not Found"); // true if level exists
     } catch {
       return false;
     }
@@ -64,7 +64,6 @@
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
 
-    // Make sure Firebase auth is ready
     if (!firebase.auth().currentUser) {
       levelInfo.innerText = 'Signing in to Firebase, please wait...';
       await new Promise(resolve => {
@@ -93,16 +92,8 @@
         const data = JSON.parse(text);
 
         if (data.name && (data.creator || data.author)) {
-          const exists = await levelExistsOnSite(randomId);
-          if (exists) {
-            levelData = data;
-            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
-          } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
-            firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
-              .catch(err => console.error('Error writing invalid ID to Firebase:', err));
-            await new Promise(r => setTimeout(r, 450));
-          }
+          levelData = data; // Use API data regardless
+          console.log(`Level data found for ID ${randomId}`);
         } else {
           await new Promise(r => setTimeout(r, 450));
         }
@@ -117,11 +108,17 @@
       return;
     }
 
+    // Check if the level is deleted (404 on gdbrowser)
+    const existsOnSite = await levelExistsOnSite(levelData.id);
+    const deleted = !existsOnSite;
+
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
     const extraPoints = rated ? 500 : 0;
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
+
+    if (deleted) points = Math.round(points / 2);
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
@@ -129,7 +126,8 @@
       <strong>ID:</strong> ${levelData.id}<br>
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
-      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
+      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
+      <strong>Deleted:</strong> ${deleted ? 'Yes' : 'No'}
     `;
     pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
