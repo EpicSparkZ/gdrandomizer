@@ -101,13 +101,13 @@
             console.log(`Attempt ${attempts}: Level ID ${randomId} not found on site, logging to Firebase and retrying...`);
             firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
               .catch(err => console.error('Error writing invalid ID to Firebase:', err));
-            await new Promise(r => setTimeout(r, 150));
+            await new Promise(r => setTimeout(r, 450));
           }
         } else {
-          await new Promise(r => setTimeout(r, 350));
+          await new Promise(r => setTimeout(r, 450));
         }
       } catch {
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 450));
       }
     }
 
