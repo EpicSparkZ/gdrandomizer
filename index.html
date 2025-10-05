@@ -60,6 +60,21 @@
     }
   }
 
+  async function logLevel(levelId, type) {
+    const refName = type === 'invalid' ? 'invalidLevels' : 'validLevels';
+    const ref = firebase.database().ref(refName);
+    try {
+      await ref.child(levelId).set({ timestamp: Date.now() });
+      const snapshot = await ref.once('value');
+      const count = snapshot.numChildren();
+      // Update helper node with count
+      await firebase.database().ref(`${refName}_count`).set(count);
+      console.log(`${type} level ${levelId} logged. Total: ${count}`);
+    } catch (err) {
+      console.error(`Error writing ${type} level ${levelId}:`, err);
+    }
+  }
+
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
@@ -92,8 +107,17 @@
         const data = JSON.parse(text);
 
         if (data.name && (data.creator || data.author)) {
-          levelData = data;
-          console.log(`Level data found for ID ${randomId}`);
+          const exists = await levelExistsOnSite(randomId);
+          const deleted = !exists; // 404 on site
+          
+          if (exists || deleted) {
+            levelData = data;
+            console.log(`Level found! ID: ${randomId}, Name: ${data.name}, Deleted: ${deleted}`);
+
+            // Log in Firebase
+            if (deleted) await logLevel(randomId, 'invalid');
+            else await logLevel(randomId, 'valid');
+          }
         } else {
           await new Promise(r => setTimeout(r, 450));
         }
@@ -108,32 +132,14 @@
       return;
     }
 
-    // Check if level is deleted on gdbrowser
-    const existsOnSite = await levelExistsOnSite(levelData.id);
-    const deleted = !existsOnSite;
-
-    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
     const extraPoints = rated ? 500 : 0;
+
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-    if (deleted) points = Math.round(points / 2);
+    if (!await levelExistsOnSite(levelData.id)) points /= 2; // half points if deleted
 
-    // --- Firebase logging ---
-    const db = firebase.database();
-
-    // Log invalid (deleted) levels with count in name
-    const invalidSnapshot = await db.ref('invalidLevels').once('value');
-    const invalidCount = invalidSnapshot.exists() ? Object.keys(invalidSnapshot.val()).length : 0;
-    db.ref('invalidLevels_' + invalidCount).child(levelData.id).set({ timestamp: Date.now() })
-      .catch(err => console.error('Error writing invalid ID to Firebase:', err));
-
-    // Log valid levels
-    db.ref('validLevels').child(levelData.id).set({ timestamp: Date.now() })
-      .catch(err => console.error('Error writing valid ID to Firebase:', err));
-
-    // Display level info
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
       <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
@@ -141,7 +147,7 @@
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${deleted ? 'Yes' : 'No'}
+      <strong>Deleted:</strong> ${!await levelExistsOnSite(levelData.id) ? 'Yes (points halved)' : 'No'}
     `;
     pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
