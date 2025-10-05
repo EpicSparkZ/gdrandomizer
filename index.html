@@ -104,10 +104,10 @@
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          await new Promise(r => setTimeout(r, 150));
+          await new Promise(r => setTimeout(r, 250));
         }
       } catch {
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 250));
       }
     }
 
@@ -120,8 +120,8 @@
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
-    const extraPoints = rated ? 150 : 0;
-    let points = (likes * 2) + (downloads * 0.15) + extraPoints;
+    const extraPoints = rated ? 500 : 0;
+    let points = (likes * 2) + (downloads * 0.05) + extraPoints;
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
