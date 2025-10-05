@@ -41,20 +41,11 @@
 
   firebase.initializeApp(firebaseConfig);
 
-  // Anonymous sign-in
   firebase.auth().signInAnonymously()
     .then(() => console.log("Signed in anonymously."))
     .catch(err => console.error("Anonymous sign-in failed:", err));
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
-
-  // Update count safely
-  async function updateCount(refName) {
-    const ref = firebase.database().ref(refName);
-    await ref.transaction(current => (current || 0) + 1, (err, committed) => {
-      if (err) console.error(`Transaction failed for ${refName}:`, err);
-    });
-  }
 
   async function levelExistsOnSite(levelId) {
     try {
@@ -98,30 +89,32 @@
         const data = JSON.parse(text);
 
         if (data.name && (data.creator || data.author)) {
-          const exists = await levelExistsOnSite(randomId);
-          const isDeleted = !exists;
-
           levelData = data;
 
-          // Firebase: log level
-          const dbRef = isDeleted ? 'invalidLevels' : 'validLevels';
-          firebase.database().ref(`${dbRef}/${randomId}`).set({
+          // Check if deleted
+          const isDeleted = !(await levelExistsOnSite(randomId));
+
+          // Firebase: log levels that have data, even if deleted
+          firebase.database().ref(`validLevels/${randomId}`).set({
             id: randomId,
             name: data.name,
             creator: data.creator || data.author,
             deleted: isDeleted,
             timestamp: Date.now()
-          }).catch(err => console.error(`Error writing ${dbRef} level ${randomId}:`, err));
+          }).catch(err => console.error(`Error writing valid level ${randomId}:`, err));
 
-          // Update counts
-          console.log(`Level stored: ${randomId}, deleted: ${isDeleted}`);
-          console.log(`Level ID ${randomId} stored. Deleted: ${isDeleted}`);
-
-          await new Promise(r => setTimeout(r, 500));
+          // If no data retrieved at all, log as invalid
         } else {
-          await new Promise(r => setTimeout(r, 500));
+          // No API data → invalid
+          firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
+            .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
         }
+
+        await new Promise(r => setTimeout(r, 500));
       } catch {
+        // Treat fetch error as invalid
+        firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
+          .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
         await new Promise(r => setTimeout(r, 500));
       }
     }
