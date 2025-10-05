@@ -114,7 +114,7 @@
           }).catch(err => console.error(`Error writing ${dbRef} level ${randomId}:`, err));
 
           // Update counts
-          await updateCount(isDeleted ? 'invalidLevelsCount' : 'validLevelsCount');
+          console.log(`Level stored: ${randomId}, deleted: ${isDeleted}`);
           console.log(`Level ID ${randomId} stored. Deleted: ${isDeleted}`);
 
           await new Promise(r => setTimeout(r, 500));
