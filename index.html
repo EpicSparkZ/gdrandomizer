@@ -29,7 +29,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
 
 <script>
-  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
@@ -40,10 +39,8 @@
     appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
 
-  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
 
-  // Sign in anonymously
   firebase.auth().signInAnonymously()
     .then(() => console.log("Signed in anonymously to Firebase."))
     .catch(error => console.error("Anonymous sign-in failed:", error));
@@ -57,18 +54,6 @@
       return !text.includes("404: Not Found");
     } catch {
       return false;
-    }
-  }
-
-  async function writeLevel(path, levelId) {
-    const ref = firebase.database().ref(`${path}/${levelId}`);
-    const countRef = firebase.database().ref(`${path}Count`);
-
-    try {
-      await ref.set({ timestamp: Date.now() });
-      countRef.transaction(current => (current || 0) + 1);
-    } catch (err) {
-      console.error(`Error writing level ${levelId} to ${path}:`, err);
     }
   }
 
@@ -105,18 +90,22 @@
 
         if (data.name && (data.creator || data.author)) {
           const exists = await levelExistsOnSite(randomId);
-          const isDeleted = !exists;
+          let deleted = !exists; // True if level is deleted
           levelData = data;
 
-          // Write to Firebase
-          if (isDeleted) {
-            await writeLevel('invalidLevels', randomId);
+          // Log invalid (deleted) levels to Firebase
+          if (deleted) {
+            console.log(`Level ID ${randomId} is deleted, logging to Firebase...`);
+            firebase.database().ref('invalidLevels/' + randomId).set({ timestamp: Date.now() })
+              .catch(err => console.error('Error writing invalid ID to Firebase:', err));
           } else {
-            await writeLevel('validLevels', randomId);
+            // Log valid levels if you want
+            firebase.database().ref('validLevels/' + randomId).set({ timestamp: Date.now() })
+              .catch(err => console.error('Error writing valid ID to Firebase:', err));
           }
 
-          console.log(`Level ID ${randomId} found. Deleted? ${isDeleted}`);
-          break;
+          console.log(`Valid level data fetched! ID: ${randomId}, Name: ${data.name}`);
+          await new Promise(r => setTimeout(r, 450));
         } else {
           await new Promise(r => setTimeout(r, 450));
         }
@@ -134,11 +123,14 @@
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
+    const deleted = !(await levelExistsOnSite(levelData.id)); // Check if deleted for points
     const extraPoints = rated ? 500 : 0;
 
-    const deleted = !(await levelExistsOnSite(levelData.id));
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
     if (deleted) points = Math.floor(points / 2);
+
+    // Never go negative
+    points = Math.max(0, points);
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
@@ -147,7 +139,7 @@
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${deleted ? 'Yes' : 'No'}
+      <strong>Deleted:</strong> ${deleted ? 'Yes (points halved)' : 'No'}
     `;
     pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
