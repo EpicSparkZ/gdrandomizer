@@ -60,18 +60,15 @@
     }
   }
 
-  async function logLevel(levelId, type) {
-    const refName = type === 'invalid' ? 'invalidLevels' : 'validLevels';
-    const ref = firebase.database().ref(refName);
+  async function writeLevel(path, levelId) {
+    const ref = firebase.database().ref(`${path}/${levelId}`);
+    const countRef = firebase.database().ref(`${path}Count`);
+
     try {
-      await ref.child(levelId).set({ timestamp: Date.now() });
-      const snapshot = await ref.once('value');
-      const count = snapshot.numChildren();
-      // Update helper node with count
-      await firebase.database().ref(`${refName}_count`).set(count);
-      console.log(`${type} level ${levelId} logged. Total: ${count}`);
+      await ref.set({ timestamp: Date.now() });
+      countRef.transaction(current => (current || 0) + 1);
     } catch (err) {
-      console.error(`Error writing ${type} level ${levelId}:`, err);
+      console.error(`Error writing level ${levelId} to ${path}:`, err);
     }
   }
 
@@ -108,16 +105,18 @@
 
         if (data.name && (data.creator || data.author)) {
           const exists = await levelExistsOnSite(randomId);
-          const deleted = !exists; // 404 on site
-          
-          if (exists || deleted) {
-            levelData = data;
-            console.log(`Level found! ID: ${randomId}, Name: ${data.name}, Deleted: ${deleted}`);
+          const isDeleted = !exists;
+          levelData = data;
 
-            // Log in Firebase
-            if (deleted) await logLevel(randomId, 'invalid');
-            else await logLevel(randomId, 'valid');
+          // Write to Firebase
+          if (isDeleted) {
+            await writeLevel('invalidLevels', randomId);
+          } else {
+            await writeLevel('validLevels', randomId);
           }
+
+          console.log(`Level ID ${randomId} found. Deleted? ${isDeleted}`);
+          break;
         } else {
           await new Promise(r => setTimeout(r, 450));
         }
@@ -137,8 +136,9 @@
     const rated = levelData.starred || false;
     const extraPoints = rated ? 500 : 0;
 
+    const deleted = !(await levelExistsOnSite(levelData.id));
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-    if (!await levelExistsOnSite(levelData.id)) points /= 2; // half points if deleted
+    if (deleted) points = Math.floor(points / 2);
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
@@ -147,7 +147,7 @@
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${!await levelExistsOnSite(levelData.id) ? 'Yes (points halved)' : 'No'}
+      <strong>Deleted:</strong> ${deleted ? 'Yes' : 'No'}
     `;
     pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
