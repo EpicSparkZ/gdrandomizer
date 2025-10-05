@@ -18,7 +18,7 @@
 <header>Random GD Level Generator</header>
 
 <main>
-  <button id="randomLevel">Get Random Level</button>
+  <button id="randomLevel">Generate</button>
   <div id="levelInfo"></div>
   <div id="points"></div>
 </main>
@@ -29,7 +29,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
 
 <script>
-  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
@@ -40,15 +39,22 @@
     appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
 
-  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
 
-  // Sign in anonymously
+  // Anonymous sign-in
   firebase.auth().signInAnonymously()
-    .then(() => console.log("Signed in anonymously to Firebase."))
-    .catch(error => console.error("Anonymous sign-in failed:", error));
+    .then(() => console.log("Signed in anonymously."))
+    .catch(err => console.error("Anonymous sign-in failed:", err));
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+  // Update count safely
+  async function updateCount(refName) {
+    const ref = firebase.database().ref(refName);
+    await ref.transaction(current => (current || 0) + 1, (err, committed) => {
+      if (err) console.error(`Transaction failed for ${refName}:`, err);
+    });
+  }
 
   async function levelExistsOnSite(levelId) {
     try {
@@ -64,9 +70,8 @@
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
 
-    // Make sure Firebase auth is ready
     if (!firebase.auth().currentUser) {
-      levelInfo.innerText = 'Signing in to Firebase, please wait...';
+      levelInfo.innerText = 'Signing into database...';
       await new Promise(resolve => {
         const unsub = firebase.auth().onAuthStateChanged(user => {
           if (user) { unsub(); resolve(); }
@@ -74,18 +79,18 @@
       });
     }
 
-    levelInfo.innerText = 'Loading random level...';
+    levelInfo.innerText = 'Loading level...';
     pointsDiv.innerText = '';
 
     let levelData = null;
-    const maxId = 126712670;  // fixed max ID
+    const maxId = 126712670;
     let attempts = 0;
     const maxAttempts = 500;
 
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
-      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
+      console.log(`Attempt ${attempts}: Level ID ${randomId}`);
 
       try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
@@ -94,48 +99,45 @@
 
         if (data.name && (data.creator || data.author)) {
           const exists = await levelExistsOnSite(randomId);
-          let deleted = false;
-          if (!exists) {
-            deleted = true;
-            console.log(`Level ID ${randomId} is deleted!`);
-          } else {
-            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
-          }
+          const isDeleted = !exists;
 
-          levelData = { ...data, deleted };
+          levelData = data;
 
-          // Update Firebase
-          const refPath = deleted ? 'invalidLevels' : 'validLevels';
-          const dbRef = firebase.database().ref(refPath + '/' + randomId);
-          dbRef.set({ timestamp: Date.now() })
-            .catch(err => console.error(`Error writing level ${randomId} to Firebase:`, err));
+          // Firebase: log level
+          const dbRef = isDeleted ? 'invalidLevels' : 'validLevels';
+          firebase.database().ref(`${dbRef}/${randomId}`).set({
+            id: randomId,
+            name: data.name,
+            creator: data.creator || data.author,
+            deleted: isDeleted,
+            timestamp: Date.now()
+          }).catch(err => console.error(`Error writing ${dbRef} level ${randomId}:`, err));
 
           // Update counts
-          const countRef = firebase.database().ref(refPath + 'Count');
-          countRef.transaction(current => (current || 0) + 1);
-          
+          await updateCount(isDeleted ? 'invalidLevelsCount' : 'validLevelsCount');
+          console.log(`Level ID ${randomId} stored. Deleted: ${isDeleted}`);
+
+          await new Promise(r => setTimeout(r, 500));
         } else {
-          await new Promise(r => setTimeout(r, 450));
+          await new Promise(r => setTimeout(r, 500));
         }
       } catch {
-        await new Promise(r => setTimeout(r, 450));
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 
     if (!levelData) {
-      levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
+      levelInfo.innerText = 'Could not find a valid level ID after 500 tries, please try again.';
       pointsDiv.innerText = '';
       return;
     }
 
+    // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
-    const extraPoints = rated ? 500 : 0;
-    let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-    
-    // Halve points if deleted
-    if (levelData.deleted) points = Math.max(0, Math.round(points / 2));
+    let points = (likes * 2) + (downloads * 0.1) + (rated ? 500 : 0);
+    if (!(await levelExistsOnSite(levelData.id))) points = Math.max(0, Math.floor(points / 2));
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
@@ -144,9 +146,9 @@
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${levelData.deleted ? 'Yes' : 'No'}
+      <strong>Deleted:</strong> ${!(await levelExistsOnSite(levelData.id)) ? 'Yes' : 'No'}
     `;
-    pointsDiv.innerText = 'Points earned: ' + Math.round(points);
+    pointsDiv.innerText = 'Total Points: ' + points;
   }
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
