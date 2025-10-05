@@ -60,20 +60,11 @@
     }
   }
 
-  async function updateCountsAndWrite(path, levelId, data) {
-    const db = firebase.database();
-    const snapshot = await db.ref(path).once("value");
-    const count = snapshot.numChildren();
-    const sectionName = path + "_" + count;
-    await db.ref(sectionName + "/" + levelId).set(data);
-    console.log(`Stored ${levelId} under ${sectionName}`);
-  }
-
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
 
-    // Wait for Firebase auth
+    // Make sure Firebase auth is ready
     if (!firebase.auth().currentUser) {
       levelInfo.innerText = 'Signing in to Firebase, please wait...';
       await new Promise(resolve => {
@@ -87,7 +78,7 @@
     pointsDiv.innerText = '';
 
     let levelData = null;
-    const maxId = 126712670;
+    const maxId = 126712670;  // fixed max ID
     let attempts = 0;
     const maxAttempts = 500;
 
@@ -103,15 +94,26 @@
 
         if (data.name && (data.creator || data.author)) {
           const exists = await levelExistsOnSite(randomId);
-          if (exists) {
-            levelData = data;
-            await updateCountsAndWrite('validLevels', randomId, { timestamp: Date.now() });
-            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
+          let deleted = false;
+          if (!exists) {
+            deleted = true;
+            console.log(`Level ID ${randomId} is deleted!`);
           } else {
-            console.log(`Attempt ${attempts}: Level ID ${randomId} is DELETED, logging as invalid...`);
-            await updateCountsAndWrite('invalidLevels', randomId, { timestamp: Date.now() });
-            await new Promise(r => setTimeout(r, 450));
+            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           }
+
+          levelData = { ...data, deleted };
+
+          // Update Firebase
+          const refPath = deleted ? 'invalidLevels' : 'validLevels';
+          const dbRef = firebase.database().ref(refPath + '/' + randomId);
+          dbRef.set({ timestamp: Date.now() })
+            .catch(err => console.error(`Error writing level ${randomId} to Firebase:`, err));
+
+          // Update counts
+          const countRef = firebase.database().ref(refPath + 'Count');
+          countRef.transaction(current => (current || 0) + 1);
+          
         } else {
           await new Promise(r => setTimeout(r, 450));
         }
@@ -129,12 +131,11 @@
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
-    const deleted = !(await levelExistsOnSite(levelData.id));
-
     const extraPoints = rated ? 500 : 0;
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-    if (deleted) points *= 0.5;
-    if (points < 0) points = 0;
+    
+    // Halve points if deleted
+    if (levelData.deleted) points = Math.max(0, Math.round(points / 2));
 
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
@@ -143,7 +144,7 @@
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${deleted ? 'Yes' : 'No'}
+      <strong>Deleted:</strong> ${levelData.deleted ? 'Yes' : 'No'}
     `;
     pointsDiv.innerText = 'Points earned: ' + Math.round(points);
   }
