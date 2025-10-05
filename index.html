@@ -10,7 +10,6 @@
   main { padding: 20px; }
   button { padding: 10px; font-size: 16px; margin: 10px; border-radius: 5px; border: none; background-color: #00bfff; color: #fff; cursor: pointer; }
   #levelInfo, #points { margin-top: 20px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
-  #firebaseCounts { margin-top: 25px; color: #aaa; font-size: 14px; }
   a { color: #00bfff; }
 </style>
 </head>
@@ -22,7 +21,6 @@
   <button id="randomLevel">Get Random Level</button>
   <div id="levelInfo"></div>
   <div id="points"></div>
-  <div id="firebaseCounts">Loading Firebase data...</div>
 </main>
 
 <!-- Firebase SDKs -->
@@ -42,47 +40,13 @@
     appId: "1:463453414221:web:95ac36c24417228c718d04"
   };
 
+  // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
 
-  const db = firebase.database();
-  const invalidRef = db.ref("invalidLevels");
-  const validRef = db.ref("validLevels");
-  const firebaseCounts = document.getElementById('firebaseCounts');
-
-  // Anonymous sign-in
-  firebase.auth().signInAnonymously().catch(console.error);
-
-  // Realtime counts display
-  function updateCountDisplay() {
-    Promise.all([
-      invalidRef.child("data").once("value"),
-      validRef.child("data").once("value")
-    ]).then(([invalidSnap, validSnap]) => {
-      const invalidCount = invalidSnap.numChildren();
-      const validCount = validSnap.numChildren();
-      firebaseCounts.textContent = `Firebase Stored IDs — Valid: ${validCount} | Invalid: ${invalidCount}`;
-    });
-  }
-
-  function updateCount(ref) {
-    ref.child("data").once("value").then(snapshot => {
-      const count = snapshot.numChildren();
-      ref.update({ count: count });
-      updateCountDisplay();
-    });
-  }
-
-  function logInvalidLevel(levelID) {
-    invalidRef.child("data").push(levelID)
-      .then(() => updateCount(invalidRef))
-      .catch(err => console.error("Error writing invalid level:", err));
-  }
-
-  function logValidLevel(levelID) {
-    validRef.child("data").push(levelID)
-      .then(() => updateCount(validRef))
-      .catch(err => console.error("Error writing valid level:", err));
-  }
+  // Sign in anonymously
+  firebase.auth().signInAnonymously()
+    .then(() => console.log("Signed in anonymously to Firebase."))
+    .catch(error => console.error("Anonymous sign-in failed:", error));
 
   const proxyUrl = 'https://api.allorigins.win/raw?url=';
 
@@ -96,12 +60,22 @@
     }
   }
 
+  async function updateCountsAndWrite(path, levelId, data) {
+    const db = firebase.database();
+    const snapshot = await db.ref(path).once("value");
+    const count = snapshot.numChildren();
+    const sectionName = path + "_" + count;
+    await db.ref(sectionName + "/" + levelId).set(data);
+    console.log(`Stored ${levelId} under ${sectionName}`);
+  }
+
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
 
+    // Wait for Firebase auth
     if (!firebase.auth().currentUser) {
-      levelInfo.innerText = 'Signing in to Firebase...';
+      levelInfo.innerText = 'Signing in to Firebase, please wait...';
       await new Promise(resolve => {
         const unsub = firebase.auth().onAuthStateChanged(user => {
           if (user) { unsub(); resolve(); }
@@ -120,6 +94,7 @@
     while (!levelData && attempts < maxAttempts) {
       attempts++;
       const randomId = Math.floor(Math.random() * maxId) + 1;
+      console.log(`Attempt ${attempts}: Trying level ID ${randomId}`);
 
       try {
         const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
@@ -130,10 +105,11 @@
           const exists = await levelExistsOnSite(randomId);
           if (exists) {
             levelData = data;
-            logValidLevel(randomId);
+            await updateCountsAndWrite('validLevels', randomId, { timestamp: Date.now() });
+            console.log(`Valid level found! ID: ${randomId}, Name: ${data.name}`);
           } else {
-            firebase.database().ref('invalidLevels/data').push(randomId);
-            updateCount(invalidRef);
+            console.log(`Attempt ${attempts}: Level ID ${randomId} is DELETED, logging as invalid...`);
+            await updateCountsAndWrite('invalidLevels', randomId, { timestamp: Date.now() });
             await new Promise(r => setTimeout(r, 450));
           }
         } else {
@@ -145,20 +121,19 @@
     }
 
     if (!levelData) {
-      levelInfo.innerText = 'Could not find a valid level after 500 tries. Try again.';
+      levelInfo.innerText = 'Could not find a valid level after 500 tries. Please try again.';
       pointsDiv.innerText = '';
       return;
     }
 
-    const existsOnSite = await levelExistsOnSite(levelData.id);
-    const deleted = !existsOnSite;
-
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
+    const deleted = !(await levelExistsOnSite(levelData.id));
+
     const extraPoints = rated ? 500 : 0;
     let points = (likes * 2) + (downloads * 0.05) + extraPoints;
-    if (deleted) points /= 2;
+    if (deleted) points *= 0.5;
     if (points < 0) points = 0;
 
     levelInfo.innerHTML = `
@@ -174,7 +149,6 @@
   }
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
-  updateCountDisplay();
 </script>
 
 </body>
