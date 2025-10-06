@@ -110,12 +110,12 @@
             .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
         }
 
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 550));
       } catch {
         // Treat fetch error as invalid
         firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
           .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 550));
       }
     }
 
@@ -129,7 +129,7 @@
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
     const rated = levelData.starred || false;
-    let points = (likes * 2) + (downloads * 0.1) + (rated ? 500 : 0);
+    let points = (likes * 2) + (downloads * 0.05) + (rated ? 500 : 0);
     if (!(await levelExistsOnSite(levelData.id))) points = Math.max(0, Math.floor(points / 2));
 
     levelInfo.innerHTML = `
