@@ -29,7 +29,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js"></script>
 
 <script>
-  const firebaseConfig = {
+const firebaseConfig = {
     apiKey: "AIzaSyDRTrz1fCq2PVGSDpXBIf3eQ4P5BU8zabU",
     authDomain: "gd-randomizer.firebaseapp.com",
     databaseURL: "https://gd-randomizer-default-rtdb.firebaseio.com",
@@ -37,28 +37,41 @@
     storageBucket: "gd-randomizer.firebasestorage.app",
     messagingSenderId: "463453414221",
     appId: "1:463453414221:web:95ac36c24417228c718d04"
-  };
+};
 
-  firebase.initializeApp(firebaseConfig);
+firebase.initializeApp(firebaseConfig);
 
-  firebase.auth().signInAnonymously()
-    .then(() => console.log("Signed in anonymously."))
-    .catch(err => console.error("Anonymous sign-in failed:", err));
+firebase.auth().signInAnonymously()
+  .then(() => console.log("Signed in anonymously."))
+  .catch(err => console.error("Anonymous sign-in failed:", err));
 
-  async function getRandomLevel() {
+const proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+async function getLevelFromGDHistory(levelId) {
+    try {
+        const response = await fetch(proxyUrl + encodeURIComponent(`https://history.geometrydash.eu/api/level/${levelId}`));
+        const text = await response.text();
+        if (!text || text.includes("404")) return null;
+        return JSON.parse(text);
+    } catch {
+        return null;
+    }
+}
+
+async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
 
     if (!firebase.auth().currentUser) {
-      levelInfo.innerText = 'Signing into database...';
-      await new Promise(resolve => {
-        const unsub = firebase.auth().onAuthStateChanged(user => {
-          if (user) { unsub(); resolve(); }
+        levelInfo.innerText = 'Signing into database...';
+        await new Promise(resolve => {
+            const unsub = firebase.auth().onAuthStateChanged(user => {
+                if (user) { unsub(); resolve(); }
+            });
         });
-      });
     }
 
-    levelInfo.innerText = 'Loading level... please wait.';
+    levelInfo.innerText = 'Loading level...';
     pointsDiv.innerText = '';
 
     let levelData = null;
@@ -67,57 +80,46 @@
     const maxAttempts = 500;
 
     while (!levelData && attempts < maxAttempts) {
-      attempts++;
-      const randomId = Math.floor(Math.random() * maxId) + 1;
-      console.log(`Attempt ${attempts}: Level ID ${randomId}`);
+        attempts++;
+        const randomId = Math.floor(Math.random() * maxId) + 1;
+        console.log(`Attempt ${attempts}: Level ID ${randomId}`);
 
-      try {
-        const response = await fetch(`https://history.geometrydash.eu/api/level/${randomId}`);
-        if (!response.ok) throw new Error('Bad response');
-        const data = await response.json();
-
-        // Check if level data exists
-        if (data.name && data.author) {
-          levelData = data;
+        const data = await getLevelFromGDHistory(randomId);
+        if (data && data.name && (data.creator || data.author)) {
+            levelData = data;
         } else {
-          // No valid data → invalid level
-          firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
-            .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
+            // Only log invalid levels
+            firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
+              .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
         }
 
         await new Promise(r => setTimeout(r, 550));
-      } catch (err) {
-        firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
-          .catch(e => console.error(`Error writing invalid level ${randomId}:`, e));
-        await new Promise(r => setTimeout(r, 550));
-      }
     }
 
     if (!levelData) {
-      levelInfo.innerText = 'Could not find a valid level ID after 500 tries, please try again.';
-      pointsDiv.innerText = '';
-      return;
+        levelInfo.innerText = 'Could not find a valid level ID after 500 tries, please try again.';
+        pointsDiv.innerText = '';
+        return;
     }
 
     // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const rated = levelData.stars && levelData.stars > 0;
+    const rated = levelData.starred || false;
     let points = (likes * 2) + (downloads * 0.05) + (rated ? 500 : 0);
 
-    // Display info
     levelInfo.innerHTML = `
       <strong>Level:</strong> <a href="https://history.geometrydash.eu/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-      <strong>Creator:</strong> ${levelData.author}<br>
+      <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
       <strong>ID:</strong> ${levelData.id}<br>
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
       <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
     `;
-    pointsDiv.innerText = 'Total Points: ' + Math.floor(points);
-  }
+    pointsDiv.innerText = 'Total Points: ' + points;
+}
 
-  document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
+document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
 </script>
 
 </body>
