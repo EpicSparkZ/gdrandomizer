@@ -45,18 +45,6 @@
     .then(() => console.log("Signed in anonymously."))
     .catch(err => console.error("Anonymous sign-in failed:", err));
 
-  const proxyUrl = 'https://api.allorigins.win/raw?url=';
-
-  async function levelExistsOnSite(levelId) {
-    try {
-      const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/level/${levelId}`));
-      const text = await response.text();
-      return !text.includes("404: Not Found");
-    } catch {
-      return false;
-    }
-  }
-
   async function getRandomLevel() {
     const levelInfo = document.getElementById('levelInfo');
     const pointsDiv = document.getElementById('points');
@@ -70,7 +58,7 @@
       });
     }
 
-    levelInfo.innerText = 'Loading level. Please note generating too fast will cause a local side timeout.';
+    levelInfo.innerText = 'Loading level... please wait.';
     pointsDiv.innerText = '';
 
     let levelData = null;
@@ -84,37 +72,23 @@
       console.log(`Attempt ${attempts}: Level ID ${randomId}`);
 
       try {
-        const response = await fetch(proxyUrl + encodeURIComponent(`https://gdbrowser.com/api/level/${randomId}`));
-        const text = await response.text();
-        const data = JSON.parse(text);
+        const response = await fetch(`https://history.geometrydash.eu/api/level/${randomId}`);
+        if (!response.ok) throw new Error('Bad response');
+        const data = await response.json();
 
-        if (data.name && (data.creator || data.author)) {
+        // Check if level data exists
+        if (data.name && data.author) {
           levelData = data;
-
-          // Check if deleted
-          const isDeleted = !(await levelExistsOnSite(randomId));
-
-          // Firebase: log levels that have data, even if deleted
-          firebase.database().ref(`validLevels/${randomId}`).set({
-            id: randomId,
-            name: data.name,
-            creator: data.creator || data.author,
-            deleted: isDeleted,
-            timestamp: Date.now()
-          }).catch(err => console.error(`Error writing valid level ${randomId}:`, err));
-
-          // If no data retrieved at all, log as invalid
         } else {
-          // No API data → invalid
+          // No valid data → invalid level
           firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
             .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
         }
 
         await new Promise(r => setTimeout(r, 550));
-      } catch {
-        // Treat fetch error as invalid
+      } catch (err) {
         firebase.database().ref(`invalidLevels/${randomId}`).set({ timestamp: Date.now() })
-          .catch(err => console.error(`Error writing invalid level ${randomId}:`, err));
+          .catch(e => console.error(`Error writing invalid level ${randomId}:`, e));
         await new Promise(r => setTimeout(r, 550));
       }
     }
@@ -128,20 +102,19 @@
     // Points calculation
     const likes = levelData.likes || 0;
     const downloads = levelData.downloads || 0;
-    const rated = levelData.starred || false;
+    const rated = levelData.stars && levelData.stars > 0;
     let points = (likes * 2) + (downloads * 0.05) + (rated ? 500 : 0);
-    if (!(await levelExistsOnSite(levelData.id))) points = Math.max(0, Math.floor(points / 2));
 
+    // Display info
     levelInfo.innerHTML = `
-      <strong>Level:</strong> <a href="https://gdbrowser.com/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
-      <strong>Creator:</strong> ${levelData.creator || levelData.author}<br>
+      <strong>Level:</strong> <a href="https://history.geometrydash.eu/level/${levelData.id}" target="_blank">${levelData.name}</a><br>
+      <strong>Creator:</strong> ${levelData.author}<br>
       <strong>ID:</strong> ${levelData.id}<br>
       <strong>Likes:</strong> ${likes}<br>
       <strong>Downloads:</strong> ${downloads}<br>
-      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}<br>
-      <strong>Deleted:</strong> ${!(await levelExistsOnSite(levelData.id)) ? 'Yes' : 'No'}
+      <strong>Rated:</strong> ${rated ? 'Yes' : 'No'}
     `;
-    pointsDiv.innerText = 'Total Points: ' + points;
+    pointsDiv.innerText = 'Total Points: ' + Math.floor(points);
   }
 
   document.getElementById('randomLevel').addEventListener('click', getRandomLevel);
